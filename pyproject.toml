@@ -1,0 +1,35 @@
+[project]
+name = "aria-str-tap"
+version = "0.1.0"
+description = "Meltano project for the CoStar STR report (Playwright tap)."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aria-runner[browser]",
+    "str-connector",
+    "singer-playwright",
+    "tap-str",
+    "meltano>=4.0",
+]
+
+[tool.uv.workspace]
+members = [
+    "packages/str-connector",
+    "packages/tap-str",
+]
+
+[tool.uv.sources]
+singer-playwright = { path = "../aria-singer-playwright", editable = true }
+tap-str = { workspace = true }
+str-connector = { workspace = true }
+aria-runner = { path = "../aria-runner" }
+
+[dependency-groups]
+dev = [
+    "pytest>=9",
+    "singer-sdk[testing]",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/tap-str/tests"]
+addopts = ["-ra"]

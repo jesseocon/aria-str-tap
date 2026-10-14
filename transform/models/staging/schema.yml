@@ -1,0 +1,19 @@
+version: 2
+
+models:
+  - name: stg_mlt_str__daily
+    description: Typed daily STR grid. One row per property, stay date, and window.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - property_id
+              - stay_date
+              - window
+    columns:
+      - name: property_id
+        tests: [not_null]
+      - name: stay_date
+        tests: [not_null]
+      - name: window
+        tests: [not_null]

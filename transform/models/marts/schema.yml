@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: mlt_mart__market__comp_set_daily
+    description: >
+      Daily STR comp set. One row per property, stay date, and window.
+      Week and month are summed in the BI tool from supply, demand, and revenue.
+      Occupancy, ADR, RevPAR, MPI, ARI, and RGI are the daily ratios.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - property_id
+              - stay_date
+              - window
+    columns:
+      - name: property_id
+        tests: [not_null]
+      - name: stay_date
+        tests: [not_null]
+      - name: window
+        tests: [not_null]
+      - name: supply
+        description: Subject rooms available. Sum this for a week or month.
+      - name: demand
+        description: Subject rooms sold. Sum this for a week or month.
+      - name: revenue
+        description: Subject room revenue. Sum this for a week or month.
+      - name: occupancy
+        description: Daily occupancy, demand divided by supply.
+      - name: adr
+      - name: revpar
+      - name: comp_set_supply
+        description: Comp set rooms available. Sum this for a week or month.
+      - name: comp_set_demand
+        description: Comp set rooms sold. Sum this for a week or month.
+      - name: comp_set_revenue
+        description: Comp set room revenue. Sum this for a week or month.
+      - name: mpi
+        description: Daily occupancy index, subject occupancy divided by comp set occupancy.
+      - name: ari
+        description: Daily ADR index.
+      - name: rgi
+        description: Daily RevPAR index.

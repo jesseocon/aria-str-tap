@@ -1,0 +1,149 @@
+send_anonymous_usage_stats: false
+project_id: aria-str-tap
+default_environment: local
+requires_meltano: '>=4.0'
+venv:
+  backend: uv
+
+environments:
+- name: local
+  config:
+    plugins:
+      extractors:
+      - name: tap-str
+        config:
+          auth_method: password
+          login_url: https://product.costar.com/
+          headless: false
+- name: development
+  config:
+    plugins:
+      extractors:
+      - name: tap-str
+        select:
+        - daily.*
+      loaders:
+      - name: target-bigquery
+        config:
+          project: hospitalityops-dev
+          dataset: bronze_1782243883257222643
+          credentials_path: $TARGET_BIGQUERY_CREDENTIALS_PATH
+          stream_maps:
+            daily:
+              __alias__: mlt_str__daily_4603810
+      utilities:
+      - name: dbt-bigquery
+        config:
+          keyfile: $TARGET_BIGQUERY_CREDENTIALS_PATH
+          project: hospitalityops-dev
+          dataset: silver_1782243883257222643
+- name: production
+  config:
+    plugins:
+      extractors:
+      - name: tap-str
+        select:
+        - daily.*
+      loaders:
+      - name: target-bigquery
+        config:
+          project: hospitalityops
+          dataset: bronze_1782243883257222643
+          credentials_path: $TARGET_BIGQUERY_CREDENTIALS_PATH
+      utilities:
+      - name: dbt-bigquery
+        config:
+          keyfile: $TARGET_BIGQUERY_CREDENTIALS_PATH
+          project: hospitalityops
+          dataset: silver_1782243883257222643
+
+plugins:
+  extractors:
+  - name: tap-str
+    namespace: tap_str
+    pip_url: -e ./packages/tap-str
+    capabilities:
+    - state
+    - catalog
+    - discover
+    - about
+    - stream-maps
+    - structured-logging
+    select:
+    - daily.*
+    settings:
+    - name: auth_method
+      kind: string
+      value: password
+    - name: login_url
+      kind: string
+      value: https://product.costar.com/
+    - name: property_id
+      kind: string
+      value: "4603810"
+    - name: begin_date
+      kind: string
+      value: "2025-08-01"
+    - name: end_date
+      kind: string
+      value: "2026-10-09"
+    - name: include_last_year
+      kind: boolean
+      value: true
+    - name: username
+      kind: string
+      sensitive: true
+    - name: password
+      kind: string
+      sensitive: true
+    - name: base_url
+      kind: string
+      value: https://www.costar.com/
+    - name: headless
+      kind: boolean
+      value: false
+    - name: rate_limit_seconds
+      kind: integer
+      value: 5
+  loaders:
+  - name: target-jsonl
+    variant: andyh1203
+    pip_url: target-jsonl
+    config:
+      destination_path: output
+  - name: target-bigquery
+    variant: z3z1ma
+    pip_url: git+https://github.com/z3z1ma/target-bigquery.git
+    config:
+      project: hospitalityops-dev
+      dataset: bronze_1782243883257222643
+      location: US
+      method: batch_job
+      batch_size: 10000
+      upsert: true
+      dedupe_before_upsert: true
+      add_record_metadata: true
+      cluster_on_key_properties: true
+      denormalized: true
+      schema_resolver_version: 2
+  utilities:
+  - name: dbt-bigquery
+    variant: dbt-labs
+    pip_url: dbt-core dbt-bigquery meltano-dbt-ext~=0.5.0
+    config:
+      project: hospitalityops-dev
+      dataset: silver_1782243883257222643
+      auth_method: service-account
+      project_dir: $MELTANO_PROJECT_ROOT/transform
+      profiles_dir: $MELTANO_PROJECT_ROOT/transform/profiles/bigquery
+
+jobs:
+- name: str-scrape-bigquery
+  tasks:
+  - tap-str target-bigquery
+- name: str-transform
+  tasks:
+  - dbt-bigquery:run
+- name: str-development-bigquery
+  tasks:
+  - tap-str target-bigquery dbt-bigquery:run

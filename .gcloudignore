@@ -1,0 +1,16 @@
+.git
+.venv
+.meltano
+.env
+.env.*
+**/storage_state.json
+output
+workshop-runs
+.workshop
+transform/target
+transform/dbt_packages
+transform/logs
+**/__pycache__
+vendor/singer-playwright/.git
+vendor/singer-playwright/.venv
+vendor/singer-playwright/**/__pycache__

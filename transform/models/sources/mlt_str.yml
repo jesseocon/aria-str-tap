@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: mlt_str
+    description: Meltano bronze load for CoStar STR.
+    database: "{{ var('bq_project') }}"
+    schema: "bronze_{{ var('org_id') }}"
+    tables:
+      - name: daily
+        identifier: "mlt_str__daily_{{ var('costar_property_id') }}"
+        description: Raw daily STR rows from tap-str via target-bigquery.
