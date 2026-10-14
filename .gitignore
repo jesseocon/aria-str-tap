@@ -25,10 +25,6 @@ workshop-runs/
 workshop-recipes/
 *.csv
 *.log
-
-# Local image build inputs
-vendor/
-
 # IDE
 .idea/
 .vscode/

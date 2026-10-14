@@ -11,6 +11,4 @@ transform/target
 transform/dbt_packages
 transform/logs
 **/__pycache__
-vendor/singer-playwright/.git
-vendor/singer-playwright/.venv
-vendor/singer-playwright/**/__pycache__
+uv.lock

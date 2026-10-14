@@ -1,9 +1,9 @@
 # CoStar STR connector image. This image is only STR: the Lighthouse tap is a
 # different image. Build from this directory:
 #
-#   mkdir -p vendor && rm -rf vendor/singer-playwright
-#   cp -R ../aria-singer-playwright vendor/singer-playwright
-#   docker build --build-arg ARIA_RUNNER_IMAGE=aria-runner:0.1.4 -t aria-connector-str .
+#   docker build --build-arg ARIA_RUNNER_IMAGE=aria-runner:0.1.6 -t aria-connector-str .
+#
+# singer-playwright installs from GitHub at the commit pinned in pyproject.toml.
 #
 # Cloud Run Job: python -m aria_runner execute --run-id <id>
 #
@@ -30,11 +30,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 
 COPY --from=aria-runner /app/pyproject.toml /app/README.md /app/aria-runner/
 COPY --from=aria-runner /app/src /app/aria-runner/src
-COPY vendor/singer-playwright/pyproject.toml vendor/singer-playwright/README.md /app/aria-singer-playwright/
-COPY vendor/singer-playwright/singer_playwright /app/aria-singer-playwright/singer_playwright
 
 WORKDIR /app/str
-COPY pyproject.toml meltano.yml README.md uv.lock ./
+COPY pyproject.toml meltano.yml README.md ./
 COPY packages ./packages
 COPY transform ./transform
 
@@ -44,7 +42,7 @@ RUN uv sync --no-dev \
     && .meltano/extractors/tap-str/venv/bin/playwright install chromium \
     && meltano --environment=development invoke dbt-bigquery:deps \
     && python -m aria_runner connectors export str --out /app/str/connector-manifest.json \
-    && chown -R runner:runner /app/str /ms-playwright /app/aria-singer-playwright
+    && chown -R runner:runner /app/str /ms-playwright
 
 COPY docker/entrypoint.sh /usr/local/bin/str-entrypoint
 RUN chmod 755 /usr/local/bin/str-entrypoint
