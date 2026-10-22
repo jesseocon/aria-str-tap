@@ -31,5 +31,5 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/tap-str/tests"]
+testpaths = ["packages/tap-str/tests", "packages/str-connector/tests"]
 addopts = ["-ra"]

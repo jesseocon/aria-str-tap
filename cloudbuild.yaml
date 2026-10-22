@@ -3,12 +3,12 @@ steps:
     args:
       - build
       - --build-arg
-      - ARIA_RUNNER_IMAGE=us-central1-docker.pkg.dev/hospitalityops/aria/aria-runner:0.1.6
+      - ARIA_RUNNER_IMAGE=us-central1-docker.pkg.dev/hospitalityops/aria/aria-runner:0.1.9
       - -t
-      - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.7
+      - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.9
       - .
 images:
-  - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.7
+  - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.9
 options:
   machineType: E2_HIGHCPU_8
 timeout: 2400s

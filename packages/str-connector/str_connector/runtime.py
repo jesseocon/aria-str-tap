@@ -9,7 +9,7 @@ from typing import Any
 
 from aria_runner.sdk import ReauthRequired, RunContext, RunResult
 
-from str_connector.manifest import KEY, manifest
+from str_connector.manifest import KEY, VARIANT_STREAMS, manifest
 
 DEV_PROJECT = "hospitalityops-dev"
 PROD_PROJECT = "hospitalityops"
@@ -44,6 +44,56 @@ def _bigquery_auth(env: dict[str, str]) -> None:
     env["DBT_BIGQUERY_AUTH_METHOD"] = "oauth"
 
 
+PORTAL_SECRETS = ("TAP_STR_PORTAL_USERNAME", "TAP_STR_PORTAL_PASSWORD", "TAP_STR_PORTAL_TOTP_SECRET")
+
+
+def selected_streams(config: dict[str, Any], variant: str) -> list[str]:
+    """The connection's streams that this variant has; all of them when none apply."""
+    available = list(VARIANT_STREAMS[variant])
+    chosen = [s for s in config.get("streams") or [] if s in available]
+    return chosen or available
+
+
+def table_name(stream: str, costar_property_id: str) -> str:
+    return f"mlt_str__{stream}_{costar_property_id}"
+
+
+def tap_env(ctx: RunContext, root: Path, streams: list[str]) -> dict[str, str]:
+    """Environment for ``meltano run tap-str target-bigquery`` on this connection."""
+    access_path = ctx.auth_option or "direct"
+    variant = ctx.variant or "full"
+    if access_path == "direct":
+        if not ctx.secret_env.get("TAP_STR_USERNAME") or not ctx.secret_env.get("TAP_STR_PASSWORD"):
+            raise ReauthRequired("CoStar username and password are not saved on this connection")
+    elif not all(ctx.secret_env.get(name) for name in PORTAL_SECRETS):
+        raise ReauthRequired("Portal user ID, password and authenticator secret are not all saved on this connection")
+    costar_property_id = str(ctx.config["property_id"])
+    env = {
+        "MELTANO_PROJECT_ROOT": str(root),
+        "STR_PROJECT_ROOT": str(root),
+        "TAP_STR_ACCESS_PATH": access_path,
+        "TAP_STR_VARIANT": variant,
+        "TAP_STR_PROPERTY_ID": costar_property_id,
+        "TAP_STR_BEGIN_DATE": str(ctx.config.get("begin_date") or "2025-08-01"),
+        "TAP_STR_END_DATE": str(ctx.config.get("end_date") or "2026-10-09"),
+        "TAP_STR_INCLUDE_LAST_YEAR": _bool(ctx.config.get("include_last_year"), True),
+        "TAP_STR_HEADLESS": "false",
+        "TAP_STR__SELECT": json.dumps([f"{stream}.*" for stream in streams]),
+        "TARGET_BIGQUERY_DATASET": f"bronze_{ctx.config['org_id']}",
+        "TARGET_BIGQUERY_STREAM_MAPS": json.dumps(
+            {stream: {"__alias__": table_name(stream, costar_property_id)} for stream in streams},
+            separators=(",", ":"),
+        ),
+    }
+    if variant == "community":
+        env["TAP_STR_MONTHLY_BEGIN_DATE"] = str(ctx.config.get("monthly_begin_date") or "2024-01-01")
+        if ctx.config.get("community_views"):
+            env["TAP_STR_COMMUNITY_VIEWS"] = json.dumps(list(ctx.config["community_views"]))
+        if ctx.config.get("comp_set_id"):
+            env["TAP_STR_COMP_SET_ID"] = str(ctx.config["comp_set_id"])
+    return env
+
+
 class StrConnector:
     key = KEY
 
@@ -54,42 +104,25 @@ class StrConnector:
         return None
 
     def run(self, ctx: RunContext) -> RunResult:
-        selected = set(ctx.config.get("streams") or ["daily"])
-        if "daily" not in selected:
-            return RunResult(metrics={"record_count": 0})
-
         root = project_root()
         meltano = str(root / ".venv" / "bin" / "meltano")
         org_id = str(ctx.config["org_id"])
         costar_property_id = str(ctx.config["property_id"])
         environments = list(ctx.config.get("environments") or ["development"])
-        if not ctx.secret_env.get("TAP_STR_USERNAME") or not ctx.secret_env.get("TAP_STR_PASSWORD"):
-            raise ReauthRequired("CoStar username and password are not saved on this connection")
+        variant = ctx.variant or "full"
+        streams = selected_streams(ctx.config, variant)
         env = os.environ.copy()
         env.update(ctx.secret_env)
-        env.update(
-            {
-                "MELTANO_PROJECT_ROOT": str(root),
-                "STR_PROJECT_ROOT": str(root),
-                "TAP_STR_PROPERTY_ID": costar_property_id,
-                "TAP_STR_BEGIN_DATE": str(ctx.config.get("begin_date") or "2025-08-01"),
-                "TAP_STR_END_DATE": str(ctx.config.get("end_date") or "2026-10-09"),
-                "TAP_STR_INCLUDE_LAST_YEAR": _bool(ctx.config.get("include_last_year"), True),
-                "TAP_STR_HEADLESS": "false",
-                "TAP_STR__SELECT": json.dumps(["daily.*"]),
-                "TARGET_BIGQUERY_DATASET": f"bronze_{org_id}",
-                "TARGET_BIGQUERY_STREAM_MAPS": json.dumps(
-                    {"daily": {"__alias__": f"mlt_str__daily_{costar_property_id}"}},
-                    separators=(",", ":"),
-                ),
-            },
-        )
+        env.update(tap_env(ctx, root, streams))
         ctx.logger.info(
-            "str %s costar %s %s..%s environments=%s",
+            "str %s costar %s via %s (%s) streams=%s %s..%s environments=%s",
             ctx.connection_id,
             costar_property_id,
+            env["TAP_STR_ACCESS_PATH"],
+            variant,
+            ",".join(streams),
             env["TAP_STR_BEGIN_DATE"],
-            env["TAP_STR_END_DATE"],
+            env["TAP_STR_END_DATE"] if variant == "full" else "last Sunday",
             ",".join(environments),
         )
 
@@ -101,6 +134,12 @@ class StrConnector:
             env=env,
             cwd=root,
         )
+
+        bronze_tables = [f"bronze_{org_id}.{table_name(stream, costar_property_id)}" for stream in streams]
+        if variant != "full":
+            # Silver models read the full-version daily table only; brand portal data stays in bronze for now.
+            ctx.logger.info("skipping dbt: no silver models for the %s variant yet", variant)
+            return RunResult(metrics={"bronze_tables": bronze_tables, "environments": environments})
 
         for environment in [scrape_env]:
             aria_property_id = (
@@ -133,7 +172,8 @@ class StrConnector:
             )
         return RunResult(
             metrics={
-                "bronze_table": f"bronze_{org_id}.mlt_str__daily_{costar_property_id}",
+                "bronze_table": bronze_tables[0],
+                "bronze_tables": bronze_tables,
                 "environments": environments,
             },
         )
