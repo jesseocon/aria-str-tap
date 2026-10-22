@@ -1,0 +1,9 @@
+query AddRevWeeklyCompSet($input: TimeSeriesTableDataInput!) {
+  AddRevWeeklyCompSetTableData {
+    compSet(input: $input)
+    compSetLastFour(input: $input)
+    compSetCurrentWeekAndTwentyEight(input: $input)
+    compSetMTD(input: $input)
+    __typename
+  }
+}

@@ -80,6 +80,9 @@ class DailyStream(StrStream):
         page: Page,
         context: Context | None,
     ) -> Iterable[dict]:
+        if self.config.get("variant", "full") != "full":
+            self.logger.info("Skipping daily: the community variant has no Data tab; use str_series")
+            return
         property_id = str(self.config["property_id"])
         begin_date = str(self.config["begin_date"])
         end_date = str(self.config["end_date"])

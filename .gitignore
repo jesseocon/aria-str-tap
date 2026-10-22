@@ -14,6 +14,8 @@ uv.lock
 !.env.example
 storage_state.json
 **/storage_state.json
+storage_state*.json
+**/storage_state*.json
 
 # Meltano / Singer output
 output/

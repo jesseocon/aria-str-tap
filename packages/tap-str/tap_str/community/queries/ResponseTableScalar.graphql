@@ -1,0 +1,3 @@
+query ResponseTableScalar($input: SubmissionInput!, $roomCountDate: String) {
+  ResponseTableScalar(input: $input, roomCountDate: $roomCountDate)
+}

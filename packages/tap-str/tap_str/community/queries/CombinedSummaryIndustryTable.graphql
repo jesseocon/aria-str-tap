@@ -1,0 +1,8 @@
+query CombinedSummaryIndustryTable($input: TimeSeriesTableDataInput!) {
+  CombinedSummaryTableData {
+    compSet(input: $input)
+    totalCompSet(input: $input)
+    twentyEightDayCompSet(input: $input)
+    __typename
+  }
+}

@@ -1,0 +1,6 @@
+query SegIndexIndustryTable($input: TimeSeriesTableDataInput!) {
+  SegIndexTableData {
+    compSet(input: $input)
+    __typename
+  }
+}

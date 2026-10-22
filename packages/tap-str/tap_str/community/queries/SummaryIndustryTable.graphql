@@ -1,0 +1,77 @@
+query SummaryIndustryTable($input: TimeSeriesTableDataInput!, $propertyId: ID!) {
+  SummaryTableData {
+    industry(input: $input) {
+      timeSeries
+      overviewRollup
+      __typename
+    }
+    compSet(input: $input) {
+      timeSeries
+      overviewRollup
+      __typename
+    }
+    __typename
+  }
+  propertyDetailV2(id: $propertyId) {
+    id
+    property {
+      brandLogo
+      brandName
+      hotelName
+      numRooms
+      address
+      city
+      state
+      postalCode
+      submarket
+      market
+      hotelClass
+      hotelScale
+      owners {
+        id
+        name
+        __typename
+      }
+      operators {
+        id
+        name
+        __typename
+      }
+      parentCompany {
+        id
+        name
+        __typename
+      }
+      hotelImgUrl
+      hotelPhone
+      hotelPhoneCountryCode
+      countryCode
+      hotelWebsite
+      openDate
+      shortAddress
+      latitude
+      longitude
+      __typename
+    }
+    SecurePropertyContext {
+      id
+      strId
+      currentProcessYear
+      currentProcessMonth
+      currentProcessWeek
+      currentProcessDay
+      countryCode
+      primarySubmarketId
+      coStarProductMarketId
+      hotelClassId
+      hotelScaleId
+      totalNumRooms
+      hotelBrandId
+      hotelCompanyId
+      hotelCollapsedClassID
+      hotelCollapsedScaleID
+      __typename
+    }
+    __typename
+  }
+}

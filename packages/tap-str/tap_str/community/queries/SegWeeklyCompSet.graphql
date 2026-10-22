@@ -1,0 +1,9 @@
+query SegWeeklyCompSet($input: TimeSeriesTableDataInput!) {
+  SegWeeklyCompSetTableData {
+    compSet(input: $input)
+    compSetLastFour(input: $input)
+    compSetCurrentWeekAndTwentyEight(input: $input)
+    compSetMTD(input: $input)
+    __typename
+  }
+}
