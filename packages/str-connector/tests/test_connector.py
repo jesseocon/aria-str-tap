@@ -108,6 +108,40 @@ def test_hilton_lobby_env() -> None:
 
 
 @pytest.mark.parametrize(
+    ("option", "variant", "secrets", "selector", "streams"),
+    [
+        ("direct", "full", {"TAP_STR_USERNAME": "u", "TAP_STR_PASSWORD": "p"}, "tag:str_full", ["daily"]),
+        (
+            "hilton_lobby",
+            "community",
+            PORTAL,
+            "tag:str_community",
+            ["str_series", "comp_set_members", "comp_set_response"],
+        ),
+    ],
+)
+def test_run_loads_then_builds_only_its_variants_models(
+    option, variant, secrets, selector, streams, tmp_path, monkeypatch
+) -> None:
+    from str_connector.runtime import StrConnector
+
+    monkeypatch.setenv("STR_PROJECT_ROOT", str(tmp_path))
+    commands: list[list[str]] = []
+    ctx = _ctx(option, variant, secrets, fiscal_year_start_month=7)
+    ctx.run_command = lambda cmd, **_kw: commands.append(cmd)  # type: ignore[method-assign]
+    result = StrConnector().run(ctx)
+
+    load, dbt = commands
+    assert load[-3:] == ["run", "tap-str", "target-bigquery"]
+    assert dbt[dbt.index("--select") + 1] == selector
+    dbt_vars = json.loads(dbt[dbt.index("--vars") + 1])
+    assert dbt_vars["property_id"] == "p1"
+    assert dbt_vars["costar_property_id"] == "1514908"
+    assert dbt_vars["fiscal_year_start_month"] == 7
+    assert result.metrics["bronze_tables"] == [f"bronze_42.mlt_str__{s}_1514908" for s in streams]
+
+
+@pytest.mark.parametrize(
     ("option", "variant", "secrets", "message"),
     [
         ("direct", "full", {}, "CoStar username and password"),

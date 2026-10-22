@@ -3,7 +3,7 @@ version: 2
 models:
   - name: mlt_mart__market__comp_set_daily
     description: >
-      Daily STR comp set. One row per property, stay date, and window.
+      Daily STR comp set (full CoStar). One row per property, stay date, and window.
       Week and month are summed in the BI tool from supply, demand, and revenue.
       Occupancy, ADR, RevPAR, MPI, ARI, and RGI are the daily ratios.
     tests:
@@ -42,3 +42,127 @@ models:
         description: Daily ADR index.
       - name: rgi
         description: Daily RevPAR index.
+
+  - name: mlt_mart__benchmark__daily
+    description: >
+      What happened each stay night, for the hotel, its STR comp set and the industry (brand
+      portal STR). The outcome source for Morning Desk flags: join a flag's stay date here to see
+      whether the night won or lost share. Occupancy and year-over-year changes are fractions;
+      MPI, ARI and RGI are on STR's 100 scale (100 = fair share). The latest seven nights are
+      provisional because STR restates recent weeks.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [comp_set_id, stay_date]
+    columns:
+      - name: stay_date
+        tests: [not_null]
+      - name: subject_occupancy
+        description: Hotel occupancy that night (fraction).
+        tests: [not_null]
+      - name: comp_set_revpar
+        description: Comp set RevPAR that night.
+      - name: mpi
+        description: Occupancy index vs the comp set, 100 = fair share.
+      - name: ari
+        description: ADR index vs the comp set, 100 = parity.
+      - name: rgi
+        description: RevPAR index vs the comp set, 100 = fair share. The overall verdict for the night.
+      - name: mpi_yoy
+        description: Year-over-year change in MPI (fraction).
+      - name: revpar_rank
+        description: Hotel's RevPAR rank within the comp set (1 = best), out of rank_property_count.
+      - name: industry_label
+        description: The industry benchmark STR uses for this hotel (its market or class).
+      - name: revenue_to_fair_share
+        description: >
+          (comp set RevPAR - hotel RevPAR) x rooms. Positive: room revenue the hotel left on the
+          table versus fair share. Negative: revenue above fair share. Uses the current room count.
+      - name: comp_set_data_ok
+        description: All STR sufficiency and isolation checks passed for the comp set that night.
+      - name: is_provisional
+        description: In the newest seven nights; may change when STR restates.
+
+  - name: mlt_mart__benchmark__period
+    description: >
+      The hotel against each STR benchmark (comp set, market, market class, submarket, submarket
+      class) for every month and window (month, 3mo, 12mo, ytd). The executive view: RGI trend,
+      RevPAR growth vs the market, comp set rank, and the room revenue gap to fair share.
+      Indexes are computed as hotel / benchmark x 100. Ranks exist for the comp set, month window.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [comp_set_id, month_end, window_name, benchmark]
+    columns:
+      - name: window_name
+        tests:
+          - accepted_values:
+              arguments:
+                values: [month, 3mo, 12mo, ytd]
+      - name: benchmark
+        tests:
+          - accepted_values:
+              arguments:
+                values: [comp_set, market, market_class, submarket, submarket_class]
+      - name: window_start
+        description: First day of the window; ytd follows var fiscal_year_start_month.
+        tests: [not_null]
+      - name: rgi
+        description: Hotel RevPAR / benchmark RevPAR x 100 for the window.
+      - name: rgi_yoy
+        description: Year-over-year change in RGI, from the two RevPAR growth rates.
+      - name: revenue_to_fair_share
+        description: >
+          (benchmark RevPAR - hotel RevPAR) x current rooms x days in window. Positive: room
+          revenue left on the table versus the benchmark. An estimate (current room count).
+      - name: benchmark_sample_property_count
+        description: Hotels in the benchmark that reported data (month window only).
+
+  - name: mlt_mart__benchmark__segment
+    description: >
+      The hotel's transient, group, contract and total business against the comp set (STR Seg
+      Index) and the industry (STR Seg), per month and window. Compare subject_*_yoy with
+      benchmark_*_yoy, or read the index, to tell "we lost share" from "the market fell".
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [comp_set_id, month_end, window_name, segment, benchmark]
+    columns:
+      - name: segment
+        tests:
+          - accepted_values:
+              arguments:
+                values: [total, transient, group, contract]
+      - name: revpar_share_direction
+        description: gaining when the hotel's segment RevPAR grew at least as fast as the benchmark's.
+      - name: benchmark_available
+        description: >
+          False when STR withholds the benchmark for this segment. STR omits comp set figures for
+          transient, group and contract when too few comp set hotels report segmentation (see
+          mlt_mart__benchmark__comp_set_coverage.monthly_seg_submitted_count); use the industry
+          rows for those segments.
+
+  - name: mlt_mart__benchmark__day_of_week
+    description: >
+      Index by weekday (monday..sunday, weekday, weekend, all) against the comp set and the
+      industry, per month and window. A weekday whose 3mo and 12mo index stays low is a
+      structural weak day.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [comp_set_id, month_end, window_name, weekday, benchmark]
+    columns:
+      - name: weekday
+        tests:
+          - accepted_values:
+              arguments:
+                values: [monday, tuesday, wednesday, thursday, friday, saturday, sunday, weekday, weekend, all]
+
+  - name: mlt_mart__benchmark__comp_set_coverage
+    description: >
+      Comp set membership and reporting per month. When is_complete is false, indexes for that
+      month rest on fewer hotels than the set and should carry a warning.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [comp_set_id, month_end]
