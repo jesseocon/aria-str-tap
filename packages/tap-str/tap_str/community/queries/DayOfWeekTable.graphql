@@ -1,0 +1,7 @@
+query DayOfWeekTable($input: TimeSeriesTableDataInput!) {
+  DayOfWeekTableData {
+    industry(input: $input)
+    compSet(input: $input)
+    __typename
+  }
+}

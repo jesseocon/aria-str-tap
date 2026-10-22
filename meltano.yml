@@ -105,6 +105,27 @@ plugins:
     - name: rate_limit_seconds
       kind: integer
       value: 5
+    - name: variant
+      kind: options
+      value: full
+      options:
+      - label: Full CoStar STR
+        value: full
+      - label: Community (brand portal)
+        value: community
+    - name: community_views
+      kind: array
+    - name: monthly_begin_date
+      kind: string
+      value: "2024-01-01"
+    - name: fiscal_year_start_month
+      kind: integer
+      value: 1
+    - name: comp_set_id
+      kind: string
+    - name: storage_state_path
+      kind: string
+      sensitive: true
   loaders:
   - name: target-jsonl
     variant: andyh1203

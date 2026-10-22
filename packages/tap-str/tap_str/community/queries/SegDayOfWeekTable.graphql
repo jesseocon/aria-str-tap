@@ -1,0 +1,7 @@
+query SegDayOfWeekTable($input: TimeSeriesTableDataInput!) {
+  SegDayOfWeekTableData {
+    industry(input: $input)
+    compSet(input: $input)
+    __typename
+  }
+}

@@ -1,0 +1,106 @@
+query PropertyDetailV2($filter: ID!, $propertyIds: [Int!], $hospitalityHQLocationId: Int, $currentProcessDate: String, $consultantExpirationDate: String, $isPVOUser: Boolean, $useMockData: Boolean) {
+  propertyDetailV2(
+    id: $filter
+    currentProcessDate: $currentProcessDate
+    useMockData: $useMockData
+  ) {
+    id
+    property {
+      brandLogo
+      brandName
+      hotelName
+      numRooms
+      address
+      city
+      state
+      postalCode
+      submarket
+      market
+      coStarProductMarketId
+      hotelClass
+      hotelScale
+      owners {
+        id
+        name
+        percentOwned
+        __typename
+      }
+      operators {
+        id
+        name
+        __typename
+      }
+      parentCompany {
+        id
+        name
+        __typename
+      }
+      hotelImgUrl
+      hotelPhone
+      hotelPhoneCountryCode
+      countryCode
+      hotelWebsite
+      openDate
+      shortAddress
+      latitude
+      longitude
+      operatingStatus
+      constructionStatus
+      propertyRelationships {
+        locationId
+        inheritProfileFrom
+        relationshipTypeId
+        inheritProfileFromName
+        __typename
+      }
+      __typename
+    }
+    SecurePropertyContext {
+      id
+      strId
+      currentProcessYear
+      currentProcessMonth
+      currentProcessWeek
+      currentProcessDay
+      currentProcessDayModeled
+      currentProcessMonthPL
+      countryCode
+      primarySubmarketId
+      coStarProductMarketId
+      hotelClassId
+      hotelScaleId
+      totalNumRooms
+      hotelBrandId
+      hotelCompanyId
+      hotelCollapsedClassID
+      hotelCollapsedScaleID
+      __typename
+    }
+    __typename
+  }
+  compsetList(
+    propertyIds: $propertyIds
+    consultantExpirationDate: $consultantExpirationDate
+    isPVOUser: $isPVOUser
+    useMockData: $useMockData
+    hospitalityHQLocationId: $hospitalityHQLocationId
+  ) {
+    propertySetId
+    type
+    name
+    isSubjectPropertyIncluded
+    startMonth
+    roomCount
+    propertyCount
+    isCompSetPerformance
+    subjectPropertyId
+    hasComposite
+    compositeRoomCount
+    userCanSee
+    tagIds
+    lastUpdated
+    compSetOwnerHQLocationId
+    compSetOwnerName
+    __typename
+  }
+}

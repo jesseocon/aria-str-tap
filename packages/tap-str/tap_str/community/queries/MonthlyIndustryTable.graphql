@@ -1,0 +1,37 @@
+query MonthlyIndustryTable($input: TimeSeriesTableDataInput!) {
+  MonthlyTableData {
+    industry(input: $input) {
+      id
+      timeIndex
+      indexOfIntervalToDate
+      indexOfCurrentIntervalEndDate
+      data {
+        benchmarkingDataSliceType
+        dataCalculationType
+        values
+        label
+        sufficiencyAndIsolationChecksKey
+        __typename
+      }
+      lastUpdatedDate
+      __typename
+    }
+    compSet(input: $input) {
+      id
+      timeIndex
+      indexOfIntervalToDate
+      indexOfCurrentIntervalEndDate
+      data {
+        benchmarkingDataSliceType
+        dataCalculationType
+        values
+        label
+        sufficiencyAndIsolationChecksKey
+        __typename
+      }
+      lastUpdatedDate
+      __typename
+    }
+    __typename
+  }
+}

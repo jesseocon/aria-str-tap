@@ -1,0 +1,9 @@
+query DailyTable($input: TimeSeriesTableDataInput!) {
+  DailyTableData {
+    industryDaily(input: $input)
+    industryMTD(input: $input)
+    compSetDaily(input: $input)
+    compSetMTD(input: $input)
+    __typename
+  }
+}

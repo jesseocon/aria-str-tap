@@ -1,0 +1,50 @@
+query PropertyDetailListV2($filter: [ID!], $currentProcessDate: String) {
+  PropertyDetailListV2(id: $filter, currentProcessDate: $currentProcessDate) {
+    id
+    property {
+      id
+      brandLogo
+      brandName
+      hotelName
+      numRooms
+      address
+      city
+      state
+      postalCode
+      submarket
+      market
+      hotelClass
+      owners {
+        id
+        name
+        __typename
+      }
+      operators {
+        id
+        name
+        __typename
+      }
+      parentCompany {
+        id
+        name
+        __typename
+      }
+      hotelImgUrl
+      hotelPhone
+      hotelPhoneCountryCode
+      countryCode
+      hotelWebsite
+      openDate
+      shortAddress
+      latitude
+      longitude
+      operatingStatus
+      constructionStatus
+      buildingName
+      coStarProductMarketId
+      strId
+      __typename
+    }
+    __typename
+  }
+}

@@ -1,0 +1,7 @@
+query PropertySetMembers($propertySetId: ID!) {
+  propertySetMembers(propertySetId: $propertySetId) {
+    propertySetId
+    memberPropertyIds
+    __typename
+  }
+}

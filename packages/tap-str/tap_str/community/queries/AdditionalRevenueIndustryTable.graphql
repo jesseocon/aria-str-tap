@@ -1,0 +1,9 @@
+query AdditionalRevenueIndustryTable($input: TimeSeriesTableDataInput!) {
+  AdditionalRevenueTableData {
+    industry(input: $input)
+    compSet(input: $input)
+    industryAddRev(input: $input)
+    compSetAddRev(input: $input)
+    __typename
+  }
+}

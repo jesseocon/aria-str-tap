@@ -8,6 +8,8 @@ from singer_sdk import typing as th
 
 from singer_playwright.tap import PlaywrightTap
 from tap_str import streams
+from tap_str.client import StrStream
+from tap_str.community import streams as community
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -69,6 +71,36 @@ class TapStr(PlaywrightTap):
             description="Also fetch the same weekdays 364 days earlier.",
         ),
         th.Property(
+            "variant",
+            th.StringType(nullable=False),
+            allowed_values=["full", "community"],
+            default="full",
+            description="full is the CoStar STR product. community is the pared-down version behind brand portals such as Hilton Lobby.",
+        ),
+        th.Property(
+            "community_views",
+            th.ArrayType(th.StringType),
+            nullable=True,
+            description="Community STAR-tab views to pull into str_series. Default: all of them.",
+        ),
+        th.Property(
+            "monthly_begin_date",
+            th.StringType(nullable=True),
+            default="2024-01-01",
+            description="Community: earliest month for monthly views. begin_date is the earliest day for daily data.",
+        ),
+        th.Property(
+            "fiscal_year_start_month",
+            th.IntegerType(nullable=False),
+            default=1,
+            description="Community: month the fiscal year starts, for STR's YTD figures.",
+        ),
+        th.Property(
+            "comp_set_id",
+            th.StringType(nullable=True),
+            description="Community: STR comp set (propertySetId). Default: the performance set.",
+        ),
+        th.Property(
             "base_url",
             th.StringType(nullable=False),
             default="https://www.costar.com/",
@@ -86,8 +118,13 @@ class TapStr(PlaywrightTap):
     ).to_dict()
 
     @override
-    def discover_streams(self) -> list[streams.DailyStream]:
-        return [streams.DailyStream(self)]
+    def discover_streams(self) -> list[StrStream]:
+        return [
+            streams.DailyStream(self),
+            community.SeriesStream(self),
+            community.CompSetMembersStream(self),
+            community.CompSetResponseStream(self),
+        ]
 
 
 if __name__ == "__main__":
