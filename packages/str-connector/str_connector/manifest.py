@@ -6,9 +6,53 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 KEY = "str"
-STREAMS = ("daily",)
+# full = the CoStar STR product (Data tab); community = the pared-down version behind brand portals.
+VARIANT_STREAMS: dict[str, tuple[str, ...]] = {
+    "full": ("daily",),
+    "community": ("str_series", "comp_set_members", "comp_set_response"),
+}
+STREAMS = tuple(stream for streams in VARIANT_STREAMS.values() for stream in streams)
+# Matches tap_str.community.plan.VIEW_NAMES.
+COMMUNITY_VIEWS = (
+    "daily",
+    "summary",
+    "monthly",
+    "day_of_week_industry",
+    "day_of_week_comp_set",
+    "seg_industry",
+    "seg_comp_set",
+    "seg_index",
+    "seg_day_of_week_industry",
+    "seg_day_of_week_comp_set",
+    "additional_revenue_industry",
+    "additional_revenue_comp_set",
+    "add_rev_weekly",
+    "seg_weekly",
+    "combined_summary_weekly",
+)
 DATE = {"type": "string", "format": "date", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
 ENVIRONMENTS = ("development", "production")
+
+DIRECT_AUTH = {
+    "kind": "password",
+    "fields": [
+        {"key": "username", "title": "Username", "secret": False, "env": "TAP_STR_USERNAME"},
+        {"key": "password", "title": "Password", "secret": True, "env": "TAP_STR_PASSWORD"},
+    ],
+}
+HILTON_LOBBY_AUTH = {
+    "kind": "password",
+    "fields": [
+        {"key": "user_id", "title": "Hilton User ID", "secret": False, "env": "TAP_STR_PORTAL_USERNAME"},
+        {"key": "password", "title": "Hilton password", "secret": True, "env": "TAP_STR_PORTAL_PASSWORD"},
+        {
+            "key": "totp_secret",
+            "title": "Authenticator secret key",
+            "secret": True,
+            "env": "TAP_STR_PORTAL_TOTP_SECRET",
+        },
+    ],
+}
 
 
 def _version() -> str:
@@ -26,23 +70,17 @@ def manifest() -> dict[str, Any]:
         "version": _version(),
         "description": "CoStar STR daily occupancy, ADR, RevPAR, comp set, and index.",
         "job": {"name": "aria-connector-str", "timeout_seconds": 3 * 3600},
-        "auth": {
-            "kind": "password",
-            "fields": [
-                {
-                    "key": "username",
-                    "title": "Username",
-                    "secret": False,
-                    "env": "TAP_STR_USERNAME",
-                },
-                {
-                    "key": "password",
-                    "title": "Password",
-                    "secret": True,
-                    "env": "TAP_STR_PASSWORD",
-                },
-            ],
-        },
+        # The first option is the default, so connections saved before options existed keep direct.
+        "auth_options": [
+            {"key": "direct", "title": "CoStar username and password", "variant": "full", "auth": DIRECT_AUTH},
+            {
+                "key": "hilton_lobby",
+                "title": "Hilton Lobby (SSO with authenticator code)",
+                "variant": "community",
+                "auth": HILTON_LOBBY_AUTH,
+            },
+        ],
+        "variant_streams": {variant: list(streams) for variant, streams in VARIANT_STREAMS.items()},
         "config_schema": {
             "type": "object",
             "title": "STR property",
@@ -90,6 +128,22 @@ def manifest() -> dict[str, Any]:
                     "type": "boolean",
                     "title": "Include last year (same weekdays)",
                     "default": True,
+                },
+                "monthly_begin_date": {
+                    **DATE,
+                    "title": "First month for monthly views (brand portal)",
+                    "default": "2024-01-01",
+                },
+                "community_views": {
+                    "type": "array",
+                    "title": "STAR views to pull (brand portal). Empty means all.",
+                    "items": {"enum": list(COMMUNITY_VIEWS)},
+                    "uniqueItems": True,
+                },
+                "comp_set_id": {
+                    "type": "string",
+                    "title": "STR comp set id (brand portal). Empty means the performance set.",
+                    "pattern": r"^\d*$",
                 },
             },
         },

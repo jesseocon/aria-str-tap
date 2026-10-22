@@ -166,7 +166,7 @@ def series_rows(
                     "key_date": dates[index],
                     "key_grain": key_grain,
                     "slice_type": slice_type,
-                    "label": series.get("label"),
+                    "label": _text(series.get("label")),
                     "entity": entity,
                     "segment": segment,
                     "calc_type": calc,
@@ -211,6 +211,18 @@ def pick_comp_set(detail: dict[str, Any], comp_set_id: str | None = None) -> dic
     return next((c for c in comp_sets if c.get("isCompSetPerformance")), comp_sets[0])
 
 
+def _text(value: Any) -> str | None:  # noqa: ANN401
+    if value is None or isinstance(value, (dict, list)):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _int(value: Any) -> int | None:  # noqa: ANN401
+    number, _ = _number(value)
+    return None if number is None else int(number)
+
+
 def _name(value: Any) -> str | None:  # noqa: ANN401
     if isinstance(value, dict):
         return value.get("name")
@@ -236,31 +248,33 @@ def member_rows(
     }
     for member_id in [*member_ids, subject_property_id]:
         prop = by_id.get(member_id, {})
+        # CoStar mixes types across hotels (hotelClass is 3 for one, "Upper Upscale" for another),
+        # so every field is coerced to the stream's schema type.
         yield {
-            "comp_set_id": str(comp_set.get("propertySetId")),
-            "comp_set_name": comp_set.get("name"),
-            "comp_set_type": comp_set.get("type"),
+            "comp_set_id": _text(comp_set.get("propertySetId")),
+            "comp_set_name": _text(comp_set.get("name")),
+            "comp_set_type": _text(comp_set.get("type")),
             "property_id": member_id,
             "is_subject": member_id == subject_property_id,
-            "str_id": None if prop.get("strId") is None else str(prop.get("strId")),
-            "hotel_name": prop.get("hotelName"),
-            "brand_name": prop.get("brandName"),
+            "str_id": _text(prop.get("strId")),
+            "hotel_name": _text(prop.get("hotelName")),
+            "brand_name": _text(prop.get("brandName")),
             "parent_company": _name(prop.get("parentCompany")),
             "owners": _name(prop.get("owners")),
             "operators": _name(prop.get("operators")),
-            "num_rooms": prop.get("numRooms"),
-            "hotel_class": prop.get("hotelClass"),
-            "market": prop.get("market"),
-            "submarket": prop.get("submarket"),
-            "address": prop.get("address"),
-            "city": prop.get("city"),
-            "state": prop.get("state"),
-            "postal_code": prop.get("postalCode"),
-            "country_code": prop.get("countryCode"),
-            "latitude": prop.get("latitude"),
-            "longitude": prop.get("longitude"),
-            "open_date": None if prop.get("openDate") is None else str(prop.get("openDate")),
-            "operating_status": prop.get("operatingStatus"),
+            "num_rooms": _int(prop.get("numRooms")),
+            "hotel_class": _text(prop.get("hotelClass")),
+            "market": _text(prop.get("market")),
+            "submarket": _text(prop.get("submarket")),
+            "address": _text(prop.get("address")),
+            "city": _text(prop.get("city")),
+            "state": _text(prop.get("state")),
+            "postal_code": _text(prop.get("postalCode")),
+            "country_code": _text(prop.get("countryCode")),
+            "latitude": _number(prop.get("latitude"))[0],
+            "longitude": _number(prop.get("longitude"))[0],
+            "open_date": _text(prop.get("openDate")),
+            "operating_status": _text(prop.get("operatingStatus")),
         }
 
 
@@ -279,6 +293,6 @@ def response_rows(data: dict[str, Any], *, comp_set_id: str) -> Iterator[dict[st
                     "census_id": None if prop.get("censusID") is None else str(prop.get("censusID")),
                     "series_name": series.get("seriesName"),
                     "period_date": f"{key[:4]}-{key[4:6]}-{key[6:]}",
-                    "numeric_value": point.get("numericValue"),
-                    "string_value": point.get("stringValue"),
+                    "numeric_value": _number(point.get("numericValue"))[0],
+                    "string_value": _text(point.get("stringValue")),
                 }

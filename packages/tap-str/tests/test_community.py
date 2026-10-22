@@ -99,6 +99,25 @@ def test_series_rows_keep_raw_ids_and_skip_nulls() -> None:
     assert (rows[2]["value"], rows[2]["value_text"]) == (None, "n/a")
 
 
+def test_series_and_response_rows_match_stream_schemas() -> None:
+    import jsonschema
+
+    from tap_str.community.streams import CompSetResponseStream, SeriesStream
+
+    extra = {"property_id": "99", "comp_set_id": "2", "operation": "SegIndustryTable", "extracted_at": "2026-10-21T00:00:00Z"}
+    for row in parse.series_rows(SEG_RESPONSE, view="seg_comp_set", key_grain="month", selected_date="2026-09-30"):
+        jsonschema.validate({**extra, **row}, SeriesStream.schema)
+    response = {
+        "ResponseTableScalar": {
+            "submission": [
+                {"censusID": 5, "propertyID": 11, "seriesData": [{"seriesName": "DailySubmitted", "value": [{"timeIndex": 20260930, "numericValue": "1", "stringValue": 7}]}]},
+            ],
+        },
+    }
+    for row in parse.response_rows(response, comp_set_id="2"):
+        jsonschema.validate(row, CompSetResponseStream.schema)
+
+
 def test_bootstrap_helpers() -> None:
     dashboard = {
         "DashboardPropertyList": {
@@ -142,6 +161,34 @@ def test_member_rows_include_subject() -> None:
     assert [(r["property_id"], r["is_subject"]) for r in rows] == [("11", False), ("12", False), ("99", True)]
     assert rows[0]["owners"] == "Owner Co"
     assert rows[1]["parent_company"] == "Parent"
+
+
+def test_member_rows_coerce_mixed_types_to_the_schema() -> None:
+    import jsonschema
+
+    from tap_str.community.streams import CompSetMembersStream
+
+    details = {
+        "PropertyDetailListV2": {
+            "property": [
+                {
+                    "id": "11",
+                    "hotelClass": 3,
+                    "postalCode": 75220,
+                    "numRooms": "248",
+                    "latitude": "32.86",
+                    "strId": 23860,
+                    "openDate": 1998,
+                },
+            ],
+        },
+    }
+    members = {"propertySetMembers": {"memberPropertyIds": ["11"]}}
+    rows = list(parse.member_rows(members, details, comp_set={"propertySetId": 2}, subject_property_id="99"))
+    row = rows[0]
+    assert (row["hotel_class"], row["postal_code"], row["num_rooms"], row["latitude"]) == ("3", "75220", 248, 32.86)
+    for record in rows:
+        jsonschema.validate(record, CompSetMembersStream.schema)
 
 
 def test_response_rows() -> None:
