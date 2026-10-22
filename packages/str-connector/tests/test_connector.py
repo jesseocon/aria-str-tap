@@ -55,6 +55,12 @@ def test_manifest_offers_direct_then_hilton_lobby() -> None:
     assert m.variant_streams["community"] == ["str_series", "comp_set_members", "comp_set_response"]
 
 
+def test_portfolio_marts_are_the_community_gold_models() -> None:
+    marts = Path(__file__).parents[3] / "transform" / "models" / "marts"
+    community = sorted(p.stem for p in marts.glob("mlt_mart__benchmark__*.sql"))
+    assert sorted(manifest()["portfolio_marts"]) == community
+
+
 def test_config_accepts_community_settings() -> None:
     config = validate_config(
         _manifest(),
