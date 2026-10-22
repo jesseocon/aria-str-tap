@@ -113,6 +113,23 @@ plugins:
         value: full
       - label: Community (brand portal)
         value: community
+    - name: access_path
+      kind: options
+      value: direct
+      options:
+      - label: CoStar login
+        value: direct
+      - label: Hilton Lobby (SSO + TOTP)
+        value: hilton_lobby
+    - name: portal_username
+      kind: string
+      sensitive: true
+    - name: portal_password
+      kind: string
+      sensitive: true
+    - name: portal_totp_secret
+      kind: string
+      sensitive: true
     - name: community_views
       kind: array
     - name: monthly_begin_date
