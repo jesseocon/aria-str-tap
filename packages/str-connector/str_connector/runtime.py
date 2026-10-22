@@ -54,6 +54,11 @@ def selected_streams(config: dict[str, Any], variant: str) -> list[str]:
     return chosen or available
 
 
+def dbt_selector(variant: str) -> str:
+    """Each variant loads different bronze tables, so it builds only the models that read them."""
+    return f"tag:str_{variant}"
+
+
 def table_name(stream: str, costar_property_id: str) -> str:
     return f"mlt_str__{stream}_{costar_property_id}"
 
@@ -136,11 +141,6 @@ class StrConnector:
         )
 
         bronze_tables = [f"bronze_{org_id}.{table_name(stream, costar_property_id)}" for stream in streams]
-        if variant != "full":
-            # Silver models read the full-version daily table only; brand portal data stays in bronze for now.
-            ctx.logger.info("skipping dbt: no silver models for the %s variant yet", variant)
-            return RunResult(metrics={"bronze_tables": bronze_tables, "environments": environments})
-
         for environment in [scrape_env]:
             aria_property_id = (
                 ctx.config.get("production_property_id")
@@ -162,11 +162,21 @@ class StrConnector:
                     "source": "mlt_str",
                     "property_id": aria_property_id,
                     "costar_property_id": costar_property_id,
+                    "fiscal_year_start_month": int(ctx.config.get("fiscal_year_start_month") or 1),
                 },
                 separators=(",", ":"),
             )
             ctx.run_command(
-                [meltano, f"--environment={environment}", "invoke", "dbt-bigquery:run", "--vars", dbt_vars],
+                [
+                    meltano,
+                    f"--environment={environment}",
+                    "invoke",
+                    "dbt-bigquery:run",
+                    "--select",
+                    dbt_selector(variant),
+                    "--vars",
+                    dbt_vars,
+                ],
                 env=dbt_env,
                 cwd=root,
             )

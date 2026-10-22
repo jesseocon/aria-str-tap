@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: stg_mlt_str__daily
-    description: Typed daily STR grid. One row per property, stay date, and window.
+    description: Typed daily STR grid (full CoStar). One row per property, stay date, and window.
     tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -17,3 +17,59 @@ models:
         tests: [not_null]
       - name: window
         tests: [not_null]
+
+  - name: stg_mlt_str__series
+    description: >
+      Community STR STAR-tab values, latest per STR identity. One row per value: raw ids
+      (source_view, block, slice_type, calc_type, key) and parsed columns (entity, segment,
+      metric, measure, window, weekday). Units: occupancy and year-over-year changes are
+      fractions (0.68 = 68%); indexes are ratios (1.46 = MPI 146); ADR and RevPAR are currency.
+      key_date is the day for day keys and the month's last day for month keys.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - comp_set_id
+              - source_view
+              - block
+              - slice_type
+              - calc_type
+              - key
+              - selected_date
+    columns:
+      - name: source_view
+        tests: [not_null]
+      - name: block
+        tests: [not_null]
+      - name: calc_type
+        tests: [not_null]
+      - name: key
+        tests: [not_null]
+      - name: measure
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [value, change_yoy, rank, rank_change_yoy, rank_property_count, rank_property_count_yoy, check]
+
+  - name: stg_mlt_str__comp_set_members
+    description: >
+      Comp set hotels, latest details per hotel. first_seen_at and last_seen_at show when a hotel
+      was in the set; is_current means it was in the most recent run. The subject hotel is
+      included (is_subject).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [comp_set_id, costar_property_id]
+    columns:
+      - name: comp_set_id
+        tests: [not_null]
+      - name: costar_property_id
+        tests: [not_null]
+
+  - name: stg_mlt_str__comp_set_response
+    description: Latest submission status per comp set hotel, series and month (numeric_value 1 = submitted).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [comp_set_id, costar_property_id, series_name, period_date]

@@ -1,7 +1,7 @@
 {{
   config(
     alias=mlt_stream_table_name('daily'),
-    tags=['silver', 'str'],
+    tags=['silver', 'str', 'str_full'],
   )
 }}
 

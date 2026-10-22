@@ -140,6 +140,13 @@ def manifest() -> dict[str, Any]:
                     "items": {"enum": list(COMMUNITY_VIEWS)},
                     "uniqueItems": True,
                 },
+                "fiscal_year_start_month": {
+                    "type": "integer",
+                    "title": "Fiscal year start month (for YTD benchmarks)",
+                    "minimum": 1,
+                    "maximum": 12,
+                    "default": 1,
+                },
                 "comp_set_id": {
                     "type": "string",
                     "title": "STR comp set id (brand portal). Empty means the performance set.",

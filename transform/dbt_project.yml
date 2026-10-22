@@ -23,6 +23,7 @@ vars:
   org_id: "{{ env_var('ARIA_ORG_ID', '1782243883257222643') }}"
   property_id: "{{ env_var('ARIA_PROPERTY_ID', 'cmrmb56w4000dbqu95a06jr1t') }}"
   costar_property_id: "{{ env_var('ARIA_COSTAR_PROPERTY_ID', '4603810') }}"
+  fiscal_year_start_month: "{{ env_var('ARIA_FISCAL_YEAR_START_MONTH', '1') | int }}"
   source: mlt_str
 
 models:

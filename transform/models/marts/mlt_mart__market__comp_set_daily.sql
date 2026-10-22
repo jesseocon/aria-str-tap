@@ -1,7 +1,7 @@
 {{
   config(
     alias=mlt_mart_table_name('market__comp_set_daily'),
-    tags=['gold', 'str'],
+    tags=['gold', 'str', 'str_full'],
   )
 }}
 
