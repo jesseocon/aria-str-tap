@@ -1,7 +1,7 @@
 # CoStar STR connector image. This image is only STR: the Lighthouse tap is a
 # different image. Build from this directory:
 #
-#   docker build --build-arg ARIA_RUNNER_IMAGE=aria-runner:0.1.10 -t aria-connector-str .
+#   docker build --build-arg ARIA_RUNNER_IMAGE=aria-runner:0.1.11 -t aria-connector-str .
 #
 # singer-playwright installs from GitHub at the commit pinned in pyproject.toml.
 #

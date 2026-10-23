@@ -32,6 +32,14 @@ COMMUNITY_VIEWS = (
 )
 DATE = {"type": "string", "format": "date", "pattern": r"^\d{4}-\d{2}-\d{2}$"}
 ENVIRONMENTS = ("development", "production")
+# Gold marts written as {mart}_{property_id}; aria-runner keeps gold_{org}.{mart} as a portfolio view.
+PORTFOLIO_MARTS = (
+    "mlt_mart__benchmark__daily",
+    "mlt_mart__benchmark__period",
+    "mlt_mart__benchmark__segment",
+    "mlt_mart__benchmark__day_of_week",
+    "mlt_mart__benchmark__comp_set_coverage",
+)
 
 DIRECT_AUTH = {
     "kind": "password",
@@ -81,6 +89,7 @@ def manifest() -> dict[str, Any]:
             },
         ],
         "variant_streams": {variant: list(streams) for variant, streams in VARIANT_STREAMS.items()},
+        "portfolio_marts": list(PORTFOLIO_MARTS),
         "config_schema": {
             "type": "object",
             "title": "STR property",
