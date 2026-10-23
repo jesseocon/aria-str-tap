@@ -14,3 +14,4 @@ transform/target
 transform/dbt_packages
 transform/logs
 **/__pycache__
+**/storage_state*.json

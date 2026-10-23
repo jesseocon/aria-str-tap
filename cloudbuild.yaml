@@ -1,14 +1,25 @@
+# Each build reuses the layers of the last image pushed as :latest (BuildKit inline
+# cache), so only the layers after the first changed file rebuild. When the lock,
+# meltano.yml and dbt packages are unchanged, nothing downloads from PyPI.
 steps:
   - name: gcr.io/cloud-builders/docker
+    env: [DOCKER_BUILDKIT=1]
     args:
       - build
       - --build-arg
       - ARIA_RUNNER_IMAGE=us-central1-docker.pkg.dev/hospitalityops/aria/aria-runner:0.1.11
+      - --build-arg
+      - BUILDKIT_INLINE_CACHE=1
+      - --cache-from
+      - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:latest
       - -t
-      - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.13
+      - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.14
+      - -t
+      - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:latest
       - .
 images:
-  - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.13
+  - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.14
+  - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:latest
 options:
   machineType: E2_HIGHCPU_8
 timeout: 2400s
