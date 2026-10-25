@@ -11,4 +11,4 @@ transform/target
 transform/dbt_packages
 transform/logs
 **/__pycache__
-uv.lock
+**/storage_state*.json

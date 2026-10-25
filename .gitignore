@@ -6,7 +6,6 @@ __pycache__/
 .meltano/
 .pytest_cache/
 .ruff_cache/
-uv.lock
 
 # Secrets and session artifacts
 .env
