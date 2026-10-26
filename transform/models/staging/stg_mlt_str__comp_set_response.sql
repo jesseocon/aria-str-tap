@@ -1,7 +1,7 @@
 {{
   config(
     alias=mlt_stream_table_name('comp_set_response'),
-    tags=['silver', 'str', 'str_community'],
+    tags=['silver', 'str'],
   )
 }}
 

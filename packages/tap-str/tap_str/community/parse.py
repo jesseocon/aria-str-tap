@@ -15,7 +15,25 @@ import re
 from collections.abc import Iterator
 from typing import Any
 
-from tap_str.daily import decode_date_key
+def decode_date_key(key: str) -> str | None:
+    """Decode a STR day key such as 2026241009 into 2026-10-09.
+
+    The key is YYYY, half (1-2), quarter (1-4), then MMDD: 2026110131 is
+    2026-01-31 and 2024230831 is 2024-08-31. Monthly keys use the month's last day.
+    """
+    if len(key) != 10 or not key.isdigit():
+        return None
+    year = int(key[0:4])
+    half = int(key[4])
+    quarter = int(key[5])
+    month = int(key[6:8])
+    day = int(key[8:10])
+    if not 1 <= month <= 12 or not 1 <= day <= 31:
+        return None
+    if quarter != (month - 1) // 3 + 1 or half != (quarter + 1) // 2:
+        return None
+    return f"{year:04d}-{month:02d}-{day:02d}"
+
 
 ENTITIES = (
     ("SubjectProperty", "subject_property"),

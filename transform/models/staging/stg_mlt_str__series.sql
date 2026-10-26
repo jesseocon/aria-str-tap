@@ -1,7 +1,7 @@
 {{
   config(
     alias=mlt_stream_table_name('series'),
-    tags=['silver', 'str', 'str_community'],
+    tags=['silver', 'str'],
     partition_by={'field': 'key_date', 'data_type': 'date', 'granularity': 'month'},
     cluster_by=['source_view', 'block', 'entity'],
   )

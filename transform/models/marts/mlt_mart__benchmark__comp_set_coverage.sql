@@ -1,7 +1,7 @@
 {{
   config(
     alias=mlt_mart_table_name('benchmark__comp_set_coverage'),
-    tags=['gold', 'str', 'str_community'],
+    tags=['gold', 'str'],
   )
 }}
 

@@ -1,26 +1,9 @@
 version: 2
 
 models:
-  - name: stg_mlt_str__daily
-    description: Typed daily STR grid (full CoStar). One row per property, stay date, and window.
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          arguments:
-            combination_of_columns:
-              - property_id
-              - stay_date
-              - window
-    columns:
-      - name: property_id
-        tests: [not_null]
-      - name: stay_date
-        tests: [not_null]
-      - name: window
-        tests: [not_null]
-
   - name: stg_mlt_str__series
     description: >
-      Community STR STAR-tab values, latest per STR identity. One row per value: raw ids
+      STR STAR-tab values, latest per STR identity. One row per value: raw ids
       (source_view, block, slice_type, calc_type, key) and parsed columns (entity, segment,
       metric, measure, window, weekday). Units: occupancy and year-over-year changes are
       fractions (0.68 = 68%); indexes are ratios (1.46 = MPI 146); ADR and RevPAR are currency.

@@ -1,6 +1,6 @@
-"""Streams for the STR community variant (Hilton Lobby and other brand portals).
+"""STR streams: every STAR-tab view, the comp set and its response.
 
-The browser must already be signed in to product.costar.com. Every call is a
+The browser must already be signed in to product.costar.com, by any login path. Every call is a
 plain in-page ``fetch`` to the STR GraphQL endpoint, so the page's cookies apply.
 """
 
@@ -134,9 +134,7 @@ def bootstrap(page: Page, config: dict[str, Any]) -> Bootstrap:
 
 
 class CommunityStream(StrStream):
-    """Base for community streams. Skips itself when the tap runs the full variant."""
-
-    variants = frozenset({"community"})
+    """Base for STR streams: one bootstrap per run, shared by every stream."""
 
     def _bootstrap(self, page: Page) -> Bootstrap:
         tap = self._tap
@@ -148,10 +146,6 @@ class CommunityStream(StrStream):
 
     @override
     def extract_site_records(self, page: Page, context: Context | None) -> Iterable[dict]:
-        variant = self.config.get("variant", "full")
-        if variant not in self.variants:
-            self.logger.info("Skipping %s: not available for the %s variant", self.name, variant)
-            return
         yield from self.community_records(page, self._bootstrap(page))
 
     def community_records(self, page: Page, boot: Bootstrap) -> Iterable[dict]:
