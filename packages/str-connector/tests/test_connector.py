@@ -132,3 +132,15 @@ def test_run_loads_then_builds_the_str_models(option, secrets, tmp_path, monkeyp
 def test_missing_secrets_ask_for_reauth(option, secrets, message) -> None:
     with pytest.raises(ReauthRequired, match=message):
         tap_env(_ctx(option, secrets), Path("/app/str"), STREAMS)
+
+
+def test_run_names_its_steps_and_declares_the_progress_contract(tmp_path, monkeypatch) -> None:
+    from str_connector.runtime import StrConnector
+
+    monkeypatch.setenv("STR_PROJECT_ROOT", str(tmp_path))
+    steps: list[str | None] = []
+    ctx = _ctx("direct", DIRECT)
+    ctx.run_command = lambda _cmd, **kw: steps.append(kw.get("step"))  # type: ignore[method-assign]
+    StrConnector().run(ctx)
+    assert steps == ["extract", "transform"]
+    assert _manifest().progress == "v1"

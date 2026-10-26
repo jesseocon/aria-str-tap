@@ -121,6 +121,7 @@ class StrConnector:
             [meltano, f"--environment={scrape_env}", "run", "tap-str", "target-bigquery"],
             env=env,
             cwd=root,
+            step="extract",
         )
 
         bronze_tables = [f"bronze_{org_id}.{table_name(stream, costar_property_id)}" for stream in streams]
@@ -162,6 +163,7 @@ class StrConnector:
                 ],
                 env=dbt_env,
                 cwd=root,
+                step="transform",
             )
         return RunResult(
             metrics={

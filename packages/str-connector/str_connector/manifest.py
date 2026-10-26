@@ -74,6 +74,7 @@ def manifest() -> dict[str, Any]:
         "version": _version(),
         "description": "CoStar STR daily occupancy, ADR, RevPAR, comp set, and index.",
         "job": {"name": "aria-connector-str", "timeout_seconds": 3 * 3600},
+        "progress": "v1",
         # Ways in to the same STR app. The first option is the default for connections saved before options.
         "auth_options": [
             {"key": "direct", "title": "CoStar username and password", "auth": DIRECT_AUTH},
