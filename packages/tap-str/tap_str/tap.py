@@ -9,7 +9,7 @@ from singer_sdk import typing as th
 from singer_playwright.browser import BrowserConfig, BrowserRuntime
 from singer_playwright.sso_login import SsoCredentials
 from singer_playwright.tap import PlaywrightTap
-from tap_str import portals, streams
+from tap_str import portals
 from tap_str.client import StrStream
 from tap_str.community import streams as community
 
@@ -58,26 +58,7 @@ class TapStr(PlaywrightTap):
             "begin_date",
             th.StringType(nullable=False),
             default="2025-08-01",
-            description="First stay date, sent as PortfolioListingAll beginDate.",
-        ),
-        th.Property(
-            "end_date",
-            th.StringType(nullable=False),
-            default="2026-10-09",
-            description="Last stay date, sent as PortfolioListingAll endDate.",
-        ),
-        th.Property(
-            "include_last_year",
-            th.BooleanType(nullable=False),
-            default=True,
-            description="Also fetch the same weekdays 364 days earlier.",
-        ),
-        th.Property(
-            "variant",
-            th.StringType(nullable=False),
-            allowed_values=["full", "community"],
-            default="full",
-            description="full is the CoStar STR product. community is the pared-down version behind brand portals such as Hilton Lobby.",
+            description="First stay date for daily views. monthly_begin_date is the first month for monthly views.",
         ),
         th.Property(
             "access_path",
@@ -108,24 +89,24 @@ class TapStr(PlaywrightTap):
             "community_views",
             th.ArrayType(th.StringType),
             nullable=True,
-            description="Community STAR-tab views to pull into str_series. Default: all of them.",
+            description="STAR-tab views to pull into str_series. Default: all of them.",
         ),
         th.Property(
             "monthly_begin_date",
             th.StringType(nullable=True),
             default="2024-01-01",
-            description="Community: earliest month for monthly views. begin_date is the earliest day for daily data.",
+            description="Earliest month for monthly views. begin_date is the earliest day for daily data.",
         ),
         th.Property(
             "fiscal_year_start_month",
             th.IntegerType(nullable=False),
             default=1,
-            description="Community: month the fiscal year starts, for STR's YTD figures.",
+            description="Month the fiscal year starts, for STR's YTD figures.",
         ),
         th.Property(
             "comp_set_id",
             th.StringType(nullable=True),
-            description="Community: STR comp set (propertySetId). Default: the performance set.",
+            description="STR comp set (propertySetId). Default: the performance set.",
         ),
         th.Property(
             "base_url",
@@ -188,7 +169,6 @@ class TapStr(PlaywrightTap):
     @override
     def discover_streams(self) -> list[StrStream]:
         return [
-            streams.DailyStream(self),
             community.SeriesStream(self),
             community.CompSetMembersStream(self),
             community.CompSetResponseStream(self),

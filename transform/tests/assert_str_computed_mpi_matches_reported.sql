@@ -1,4 +1,4 @@
-{{ config(tags=['str', 'str_community']) }}
+{{ config(tags=['str']) }}
 
 -- The period mart computes indexes as hotel / benchmark x 100. For the comp set and a single
 -- month, STR also reports MPI, ARI and RGI in its Monthly view. They must agree (within rounding);

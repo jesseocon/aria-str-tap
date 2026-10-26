@@ -1,7 +1,7 @@
 {{
   config(
     alias=mlt_mart_table_name('benchmark__daily'),
-    tags=['gold', 'str', 'str_community'],
+    tags=['gold', 'str'],
     partition_by={'field': 'stay_date', 'data_type': 'date', 'granularity': 'month'},
   )
 }}

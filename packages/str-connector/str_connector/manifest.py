@@ -6,12 +6,8 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 KEY = "str"
-# full = the CoStar STR product (Data tab); community = the pared-down version behind brand portals.
-VARIANT_STREAMS: dict[str, tuple[str, ...]] = {
-    "full": ("daily",),
-    "community": ("str_series", "comp_set_members", "comp_set_response"),
-}
-STREAMS = tuple(stream for streams in VARIANT_STREAMS.values() for stream in streams)
+# STAR-tab streams. Every login lands on the same STR app, so every connection syncs these.
+STREAMS = ("str_series", "comp_set_members", "comp_set_response")
 # Matches tap_str.community.plan.VIEW_NAMES.
 COMMUNITY_VIEWS = (
     "daily",
@@ -78,17 +74,15 @@ def manifest() -> dict[str, Any]:
         "version": _version(),
         "description": "CoStar STR daily occupancy, ADR, RevPAR, comp set, and index.",
         "job": {"name": "aria-connector-str", "timeout_seconds": 3 * 3600},
-        # The first option is the default, so connections saved before options existed keep direct.
+        # Ways in to the same STR app. The first option is the default for connections saved before options.
         "auth_options": [
-            {"key": "direct", "title": "CoStar username and password", "variant": "full", "auth": DIRECT_AUTH},
+            {"key": "direct", "title": "CoStar username and password", "auth": DIRECT_AUTH},
             {
                 "key": "hilton_lobby",
                 "title": "Hilton Lobby (SSO with authenticator code)",
-                "variant": "community",
                 "auth": HILTON_LOBBY_AUTH,
             },
         ],
-        "variant_streams": {variant: list(streams) for variant, streams in VARIANT_STREAMS.items()},
         "portfolio_marts": list(PORTFOLIO_MARTS),
         "config_schema": {
             "type": "object",
@@ -129,23 +123,17 @@ def manifest() -> dict[str, Any]:
                     "items": {"enum": list(STREAMS)},
                     "minItems": 1,
                     "uniqueItems": True,
-                    "default": ["daily"],
+                    "default": list(STREAMS),
                 },
-                "begin_date": {**DATE, "title": "First stay date", "default": "2025-08-01"},
-                "end_date": {**DATE, "title": "Last stay date", "default": "2026-10-09"},
-                "include_last_year": {
-                    "type": "boolean",
-                    "title": "Include last year (same weekdays)",
-                    "default": True,
-                },
+                "begin_date": {**DATE, "title": "First stay date for daily views", "default": "2025-08-01"},
                 "monthly_begin_date": {
                     **DATE,
-                    "title": "First month for monthly views (brand portal)",
+                    "title": "First month for monthly views",
                     "default": "2024-01-01",
                 },
                 "community_views": {
                     "type": "array",
-                    "title": "STAR views to pull (brand portal). Empty means all.",
+                    "title": "STAR views to pull. Empty means all.",
                     "items": {"enum": list(COMMUNITY_VIEWS)},
                     "uniqueItems": True,
                 },
@@ -158,7 +146,7 @@ def manifest() -> dict[str, Any]:
                 },
                 "comp_set_id": {
                     "type": "string",
-                    "title": "STR comp set id (brand portal). Empty means the performance set.",
+                    "title": "STR comp set id. Empty means the performance set.",
                     "pattern": r"^\d*$",
                 },
             },

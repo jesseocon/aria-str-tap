@@ -6,18 +6,15 @@ sources:
     database: "{{ var('bq_project') }}"
     schema: "bronze_{{ var('org_id') }}"
     tables:
-      - name: daily
-        identifier: "mlt_str__daily_{{ var('costar_property_id') }}"
-        description: Raw daily STR rows from tap-str via target-bigquery (full CoStar, Data tab).
       - name: str_series
         identifier: "mlt_str__str_series_{{ var('costar_property_id') }}"
         description: >
-          Community STR (brand portal) STAR-tab values, one row per value as loaded. Raw STR ids
+          STR STAR-tab values, one row per value as loaded. Raw STR ids
           (block, slice_type, calc_type, key) plus parsed entity, segment, metric, measure, window,
           weekday. Every weekly run appends; rows repeat across runs and overlapping windows.
       - name: comp_set_members
         identifier: "mlt_str__comp_set_members_{{ var('costar_property_id') }}"
-        description: Community STR comp set hotels with details, appended each run.
+        description: STR comp set hotels with details, appended each run.
       - name: comp_set_response
         identifier: "mlt_str__comp_set_response_{{ var('costar_property_id') }}"
-        description: Community STR submission status per comp set hotel, series and month, appended each run.
+        description: STR submission status per comp set hotel, series and month, appended each run.

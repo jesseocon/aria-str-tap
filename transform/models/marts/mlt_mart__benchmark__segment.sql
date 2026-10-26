@@ -1,7 +1,7 @@
 {{
   config(
     alias=mlt_mart_table_name('benchmark__segment'),
-    tags=['gold', 'str', 'str_community'],
+    tags=['gold', 'str'],
   )
 }}
 

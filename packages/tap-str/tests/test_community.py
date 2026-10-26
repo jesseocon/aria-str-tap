@@ -299,3 +299,30 @@ def test_every_view_has_a_query() -> None:
         "ResponseTableScalar",
     }:
         assert f"query {operation}" in plan.query(operation)
+
+
+def test_decode_date_key() -> None:
+    assert parse.decode_date_key("2026241009") == "2026-10-09"
+    assert parse.decode_date_key("2026230920") == "2026-09-20"
+    assert parse.decode_date_key("2025230921") == "2025-09-21"
+    assert parse.decode_date_key("nope") is None
+
+
+def test_decode_date_key_every_month() -> None:
+    # Keys copied from a SummaryIndustryTable response (Aug 2024 - Sep 2026).
+    keys = {
+        "2024230831": "2024-08-31",
+        "2024241130": "2024-11-30",
+        "2024241231": "2024-12-31",
+        "2025110131": "2025-01-31",
+        "2025110228": "2025-02-28",
+        "2025110331": "2025-03-31",
+        "2025120430": "2025-04-30",
+        "2025120630": "2025-06-30",
+        "2025230731": "2025-07-31",
+    }
+    for key, expected in keys.items():
+        assert parse.decode_date_key(key) == expected
+    # Quarter or half that disagrees with the month is not a date key.
+    assert parse.decode_date_key("2025240831") is None
+    assert parse.decode_date_key("2025130131") is None
