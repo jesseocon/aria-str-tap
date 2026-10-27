@@ -7,6 +7,7 @@ import sys
 from singer_sdk import typing as th
 
 from singer_playwright.browser import BrowserConfig, BrowserRuntime
+from singer_playwright.progress import report
 from singer_playwright.sso_login import SsoCredentials
 from singer_playwright.tap import PlaywrightTap
 from tap_str import portals, signout
@@ -172,13 +173,18 @@ class TapStr(PlaywrightTap):
     @override
     def teardown(self) -> None:
         runtime = self._browser_runtime
+        # Every run's log says what happened to its CoStar session, success or not.
         if runtime is not None and self._session_verified:
             page = self._portal_page if self._portal_page is not None and not self._portal_page.is_closed() else runtime.page
             try:
                 how = signout.sign_out(page)
                 self.logger.info("Signed out of CoStar (%s)", how)
             except Exception as exc:  # noqa: BLE001 - closing the browser still has to happen
-                self.logger.warning("Signing out of CoStar failed, closing the browser anyway: %s", exc)
+                message = f"Signing out of CoStar failed, closing the browser anyway: {exc}"
+                self.logger.warning("%s", message)
+                report(self.logger, "warning", message=message, code="sign_out_failed")
+        else:
+            self.logger.info("Signed out of CoStar (never signed in; nothing to sign out)")
         self._portal_page = None
         # PlaywrightTap.teardown ends in super().teardown(), which singer-sdk's Tap does not have.
         if runtime is not None:
