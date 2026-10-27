@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
-from aria_runner.sdk import ReauthRequired, RunContext, RunResult
+from aria_runner.sdk import LoginHandoff, ReauthRequired, RunContext, RunResult
 
 from str_connector.manifest import ENVIRONMENTS, KEY, STREAMS, manifest
 
@@ -78,6 +79,8 @@ def tap_env(ctx: RunContext, root: Path, streams: list[str]) -> dict[str, str]:
             separators=(",", ":"),
         ),
     }
+    if ctx.login_handoff is not None and access_path == "direct":
+        env["TAP_STR_HANDOFF_PATH"] = str(ctx.login_handoff.path)
     if ctx.config.get("community_views"):
         env["TAP_STR_COMMUNITY_VIEWS"] = json.dumps(list(ctx.config["community_views"]))
     if ctx.config.get("comp_set_id"):
@@ -93,6 +96,23 @@ class StrConnector:
 
     def probe(self, ctx: RunContext) -> None:
         return None
+
+    def release_login(self, handoff: LoginHandoff, logger: logging.Logger) -> str:
+        """End of a login chain: sign out of CoStar with the handed-over session, headed."""
+        from playwright.sync_api import sync_playwright
+        from tap_str import signout
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=False)
+            try:
+                context = browser.new_context(storage_state=str(handoff.path), viewport={"width": 1600, "height": 1000})
+                page = context.new_page()
+                page.goto(signout.DASHBOARD, wait_until="load", timeout=60_000)
+                how = signout.sign_out(page)
+            finally:
+                browser.close()
+        logger.info("Signed out of CoStar at the end of the login chain (%s)", how)
+        return f"Signed out of CoStar at the end of the login chain ({how})"
 
     def run(self, ctx: RunContext) -> RunResult:
         root = project_root()

@@ -205,3 +205,81 @@ def test_signing_in_again_happens_once_and_only_for_direct_logins(monkeypatch) -
     lobby, _ = _tap(FakePage(DASH))
     lobby._config = {**lobby.config, "username": "u", "password": "p", "access_path": "hilton_lobby"}  # noqa: SLF001
     assert lobby.sign_in_again("SessionExpired on X") is False
+
+
+class ChainContext:
+    def __init__(self) -> None:
+        self.saved: list[str] = []
+
+    def storage_state(self, *, path: str) -> None:
+        self.saved.append(path)
+        open(path, "w").write('{"cookies": [{"name": "costar"}], "origins": []}')
+
+
+def test_in_a_login_chain_the_session_is_handed_on_not_signed_out(tmp_path, caplog) -> None:
+    page = FakePage(DASH)
+    tap, runtime = _tap(page)
+    runtime.context = ChainContext()
+    handoff = tmp_path / "storage_state.json"
+    tap._config = {**tap.config, "handoff_path": str(handoff), "access_path": "direct"}  # noqa: SLF001
+    with caplog.at_level(logging.INFO):
+        tap.teardown()
+    assert page.live and page.clicks == []  # not signed out
+    assert handoff.read_text().startswith('{"cookies"') and not (tmp_path / "storage_state.json.part").exists()
+    assert "Handed the CoStar session to the next run" in caplog.text
+    assert runtime.stopped
+
+
+def test_a_run_handed_a_live_session_starts_signed_in_without_a_password(tmp_path, monkeypatch, caplog) -> None:
+    import tap_str.tap as tap_module
+
+    started: list[str | None] = []
+
+    class Runtime:
+        def __init__(self, config) -> None:  # noqa: ANN001
+            started.append(config.storage_state_path)
+            self.page = FakePage(DASH)
+
+        def start(self) -> None:
+            return None
+
+        def stop(self) -> None:
+            return None
+
+    handoff = tmp_path / "storage_state.json"
+    handoff.write_text('{"cookies": [], "origins": []}')
+    monkeypatch.setattr(tap_module, "BrowserRuntime", Runtime)
+    tap = TapStr(config={"property_id": "1", "handoff_path": str(handoff), "access_path": "direct"}, validate_config=False)
+    with caplog.at_level(logging.INFO):
+        tap._ensure_browser_started()  # noqa: SLF001
+    assert started == [str(handoff)] and tap._session_verified  # noqa: SLF001
+    assert "no new sign-in" in caplog.text
+
+
+def test_a_dead_handed_over_session_falls_back_to_the_password(tmp_path, monkeypatch) -> None:
+    import tap_str.tap as tap_module
+    from singer_playwright.tap import PlaywrightTap
+
+    class Runtime:
+        def __init__(self, config) -> None:  # noqa: ANN001
+            self.page = FakePage(DASH, live=False)
+
+        def start(self) -> None:
+            return None
+
+        def stop(self) -> None:
+            return None
+
+    signed_in: list[bool] = []
+
+    def password_start(self) -> None:  # noqa: ANN001
+        signed_in.append(True)
+        self._session_verified = True
+
+    handoff = tmp_path / "storage_state.json"
+    handoff.write_text('{"cookies": [], "origins": []}')
+    monkeypatch.setattr(tap_module, "BrowserRuntime", Runtime)
+    monkeypatch.setattr(PlaywrightTap, "_ensure_browser_started", password_start)
+    tap = TapStr(config={"property_id": "1", "handoff_path": str(handoff), "access_path": "direct"}, validate_config=False)
+    tap._ensure_browser_started()  # noqa: SLF001
+    assert signed_in == [True]
