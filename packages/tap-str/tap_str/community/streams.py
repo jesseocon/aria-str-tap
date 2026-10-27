@@ -6,6 +6,7 @@ plain in-page ``fetch`` to the STR GraphQL endpoint, so the page's cookies apply
 
 from __future__ import annotations
 
+import random
 import sys
 import time
 from dataclasses import dataclass
@@ -55,6 +56,9 @@ async ({url, bodies}) => {
 # request works (seen 2026-10-26/27: 3 of ~20 runs, each at 4.9 min into str_series). A batch
 # that gets it waits, then is sent again; a session that really ended fails every retry.
 RETRY_WAITS_SECONDS = (5, 15)
+# A person moving through STAR views takes a few seconds between them. Batches of queries
+# wait a random 0.5x-1.5x of query_pause_seconds (config, default 4) between each other.
+QUERY_PAUSE_SECONDS = 4.0
 LOGIN_HOST = "secure.costargroup.com"
 
 
@@ -109,6 +113,15 @@ def _fetch(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[
     return results
 
 
+def pause(stream: Any = None) -> None:
+    """Wait between query batches like a person between views (random, so not a fixed beat)."""
+    tap = _tap_of(stream)
+    config = getattr(tap, "config", None) or {}
+    base = float(config.get("query_pause_seconds", QUERY_PAUSE_SECONDS))
+    if base > 0:
+        time.sleep(random.uniform(0.5 * base, 1.5 * base))
+
+
 def graphql(page: Page, bodies: list[dict[str, Any]], *, stream: Any = None) -> list[dict[str, Any]]:
     """POST each body from inside the page; returns each response's ``data``.
 
@@ -117,6 +130,8 @@ def graphql(page: Page, bodies: list[dict[str, Any]], *, stream: Any = None) -> 
     out: list[dict[str, Any]] = []
     for start in range(0, len(bodies), BATCH_SIZE):
         batch = bodies[start : start + BATCH_SIZE]
+        if start:
+            pause(stream)
         results = _fetch(page, batch, stream)
         for body, result in zip(batch, results, strict=True):
             payload = result.get("json") or {}
@@ -304,6 +319,8 @@ class SeriesStream(CommunityStream):
         extracted_at = datetime.now(UTC).isoformat()
         for start in range(0, len(calls), BATCH_SIZE):
             batch = calls[start : start + BATCH_SIZE]
+            if start:
+                pause(self)
             for call, data in zip(batch, graphql(page, [c.body for c in batch], stream=self), strict=True):
                 for row in parse.series_rows(
                     data,

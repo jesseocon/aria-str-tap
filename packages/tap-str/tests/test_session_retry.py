@@ -172,3 +172,17 @@ def test_without_signing_in_again_a_dead_session_still_fails(waits) -> None:
     with pytest.raises(streams.GraphQLError, match="SessionExpired"):
         streams.graphql(FakePage([[EXPIRED]]), BODIES, stream=TappedStream(tap))
     assert len(tap.reasons) == 1
+
+
+def test_query_batches_pause_a_random_human_interval_between_them(monkeypatch) -> None:
+    slept: list[float] = []
+    monkeypatch.setattr(streams.time, "sleep", slept.append)
+    tap = FakeTap()
+    tap.config = {"query_pause_seconds": 4}
+    bodies = [{"operationName": f"Op{i}"} for i in range(10)]  # 3 batches of up to 4
+    streams.graphql(FakePage([[OK]]), bodies, stream=TappedStream(tap))
+    assert len(slept) == 2 and all(2.0 <= s <= 6.0 for s in slept)
+    tap.config = {"query_pause_seconds": 0}
+    slept.clear()
+    streams.graphql(FakePage([[OK]]), bodies, stream=TappedStream(tap))
+    assert slept == []
