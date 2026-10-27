@@ -25,6 +25,15 @@ else:
     from typing_extensions import override
 
 
+# Ways in whose sessions a login chain hands from run to run.
+CHAINED_PATHS = ("direct", "wyndham_community")
+# Settings each brand portal needs.
+PORTAL_SETTINGS = {
+    "hilton_lobby": ("portal_username", "portal_password", "portal_totp_secret"),
+    "wyndham_community": ("okta_username", "code_address"),
+}
+
+
 class TapStr(PlaywrightTap):
     name = "tap-str"
 
@@ -115,6 +124,16 @@ class TapStr(PlaywrightTap):
             description="STR comp set (propertySetId). Default: the performance set.",
         ),
         th.Property(
+            "okta_username",
+            th.StringType(nullable=True),
+            description="Wyndham Community: the Okta username (e.g. first.last@wyndham.com; not an inbox).",
+        ),
+        th.Property(
+            "code_address",
+            th.StringType(nullable=True),
+            description="Wyndham Community: Aria code inbox the emailed codes are forwarded to.",
+        ),
+        th.Property(
             "handoff_path",
             th.StringType(nullable=True),
             description="Login chain only: memory-only file for the signed-in browser state between runs.",
@@ -181,12 +200,15 @@ class TapStr(PlaywrightTap):
         self.egress.record(page, "after signing in again")
         return True
 
-    @override
     @property
     def handoff_path(self) -> Path | None:
-        """Where a login chain hands the signed-in browser state between runs (direct logins)."""
+        """Where a login chain hands the signed-in browser state between runs.
+
+        Direct and Wyndham logins chain (one sign-in, one emailed code, per chain); Hilton
+        Lobby signs in per run.
+        """
         raw = self.config.get("handoff_path")
-        if not raw or self.config.get("access_path", "direct") != "direct":
+        if not raw or self.config.get("access_path", "direct") not in CHAINED_PATHS:
             return None
         return Path(str(raw))
 
@@ -198,7 +220,7 @@ class TapStr(PlaywrightTap):
         self._browser_runtime.start()
         page = self._browser_runtime.page
         if signout.session_closed(page):
-            self.logger.info("The handed-over CoStar session has ended; signing in with the password")
+            self.logger.info("The handed-over CoStar session has ended; signing in again")
             self._browser_runtime.stop()
             self._browser_runtime = None
             return False
@@ -206,12 +228,13 @@ class TapStr(PlaywrightTap):
         self.logger.info("Started signed in to CoStar with the previous run's session (no new sign-in)")
         return True
 
+    @override
     def _ensure_browser_started(self) -> None:
         access_path = self.config.get("access_path", "direct")
         if self._browser_runtime is not None:
             return
         handoff = self.handoff_path
-        if access_path == "direct" and handoff is not None and handoff.is_file() and handoff.stat().st_size:
+        if handoff is not None and handoff.is_file() and handoff.stat().st_size:
             if self._start_from_handoff(handoff):
                 return
         if access_path == "direct":
@@ -220,22 +243,27 @@ class TapStr(PlaywrightTap):
                 self.logger.info("Signed in to CoStar with the password")
             return
         enter = portals.PORTALS[access_path]
-        missing = [k for k in ("portal_username", "portal_password", "portal_totp_secret") if not self.config.get(k)]
+        needed = PORTAL_SETTINGS[access_path]
+        missing = [k for k in needed if not self.config.get(k)]
         if missing:
             msg = f"access_path {access_path} needs {', '.join(missing)}"
             raise ValueError(msg)
+        if access_path == "wyndham_community":
+            creds: object = portals.OktaEmailCodeCredentials(
+                username=str(self.config["okta_username"]),
+                code_address=str(self.config["code_address"]),
+            )
+        else:
+            creds = SsoCredentials(
+                username=str(self.config["portal_username"]),
+                password=str(self.config["portal_password"]),
+                totp_secret=str(self.config["portal_totp_secret"]),
+            )
         self._browser_runtime = BrowserRuntime(
             BrowserConfig(storage_state_path=None, headless=bool(self.config.get("headless", True))),
         )
         self._browser_runtime.start()
-        self._portal_page = enter(
-            self._browser_runtime.page,
-            SsoCredentials(
-                username=str(self.config["portal_username"]),
-                password=str(self.config["portal_password"]),
-                totp_secret=str(self.config["portal_totp_secret"]),
-            ),
-        )
+        self._portal_page = enter(self._browser_runtime.page, creds)
         self._session_verified = True
 
     @property
@@ -280,6 +308,14 @@ class TapStr(PlaywrightTap):
                 self.logger.warning("%s", message)
                 screenshot(page, "CoStar sign-out failed", self.logger)
                 report(self.logger, "warning", message=message, code="sign_out_failed")
+            if self.config.get("access_path") == "wyndham_community":
+                # Wyndham's Okta session is a separate sign-in; end it too.
+                try:
+                    self.logger.info("Signed out of Wyndham Okta (%s)", portals.okta_sign_out(page))
+                except Exception as exc:  # noqa: BLE001 - closing the browser still has to happen
+                    message = f"Signing out of Wyndham Okta failed: {exc}"
+                    self.logger.warning("%s", message)
+                    report(self.logger, "warning", message=message, code="sign_out_failed")
         elif runtime is None or not self._session_verified:
             self.logger.info("Signed out of CoStar (never signed in; nothing to sign out)")
         self._portal_page = None
