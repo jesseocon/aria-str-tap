@@ -113,6 +113,12 @@ class TapStr(PlaywrightTap):
             description="STR comp set (propertySetId). Default: the performance set.",
         ),
         th.Property(
+            "query_pause_seconds",
+            th.NumberType(nullable=False),
+            default=4.0,
+            description="Average pause between query batches, randomized 0.5x-1.5x, like a person between views.",
+        ),
+        th.Property(
             "base_url",
             th.StringType(nullable=False),
             default="https://www.costar.com/",
