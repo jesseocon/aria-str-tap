@@ -9,7 +9,7 @@ from singer_sdk import typing as th
 from singer_playwright.browser import BrowserConfig, BrowserRuntime
 from singer_playwright.sso_login import SsoCredentials
 from singer_playwright.tap import PlaywrightTap
-from tap_str import portals
+from tap_str import portals, signout
 from tap_str.client import StrStream
 from tap_str.community import streams as community
 
@@ -162,9 +162,29 @@ class TapStr(PlaywrightTap):
         return super().page
 
     @override
+    def sync_all(self) -> None:
+        # singer-sdk has no teardown hook, so sign out here whether the sync finishes or fails.
+        try:
+            super().sync_all()
+        finally:
+            self.teardown()
+
+    @override
     def teardown(self) -> None:
+        runtime = self._browser_runtime
+        if runtime is not None and self._session_verified:
+            page = self._portal_page if self._portal_page is not None and not self._portal_page.is_closed() else runtime.page
+            try:
+                how = signout.sign_out(page)
+                self.logger.info("Signed out of CoStar (%s)", how)
+            except Exception as exc:  # noqa: BLE001 - closing the browser still has to happen
+                self.logger.warning("Signing out of CoStar failed, closing the browser anyway: %s", exc)
         self._portal_page = None
-        super().teardown()
+        # PlaywrightTap.teardown ends in super().teardown(), which singer-sdk's Tap does not have.
+        if runtime is not None:
+            runtime.stop()
+            self._browser_runtime = None
+            self._session_verified = False
 
     @override
     def discover_streams(self) -> list[StrStream]:
