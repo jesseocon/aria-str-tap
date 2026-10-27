@@ -117,6 +117,8 @@ plugins:
         value: direct
       - label: Hilton Lobby (SSO + TOTP)
         value: hilton_lobby
+      - label: Wyndham Community (Okta + emailed code)
+        value: wyndham_community
     - name: portal_username
       kind: string
       sensitive: true
@@ -140,6 +142,10 @@ plugins:
       kind: integer
       value: 4
     - name: handoff_path
+      kind: string
+    - name: okta_username
+      kind: string
+    - name: code_address
       kind: string
     - name: storage_state_path
       kind: string

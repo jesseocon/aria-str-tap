@@ -59,6 +59,21 @@ HILTON_LOBBY_AUTH = {
 }
 
 
+WYNDHAM_COMMUNITY_AUTH = {
+    "kind": "password",
+    # No password: Okta emails a one-time code, forwarded to Aria's code inbox (aria_runner.codes).
+    "fields": [
+        {"key": "okta_username", "title": "Wyndham Okta username", "secret": False, "env": "TAP_STR_OKTA_USERNAME"},
+        {
+            "key": "code_address",
+            "title": "Code inbox (Okta emails forwarded here)",
+            "secret": False,
+            "env": "TAP_STR_CODE_ADDRESS",
+        },
+    ],
+}
+
+
 def _version() -> str:
     try:
         return version("str-connector")
@@ -85,6 +100,11 @@ def manifest() -> dict[str, Any]:
                 "key": "hilton_lobby",
                 "title": "Hilton Lobby (SSO with authenticator code)",
                 "auth": HILTON_LOBBY_AUTH,
+            },
+            {
+                "key": "wyndham_community",
+                "title": "Wyndham Community (Okta with emailed code)",
+                "auth": WYNDHAM_COMMUNITY_AUTH,
             },
         ],
         "portfolio_marts": list(PORTFOLIO_MARTS),

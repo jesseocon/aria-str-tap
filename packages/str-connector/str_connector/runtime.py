@@ -40,6 +40,9 @@ def _bigquery_auth(env: dict[str, str]) -> None:
 
 
 PORTAL_SECRETS = ("TAP_STR_PORTAL_USERNAME", "TAP_STR_PORTAL_PASSWORD", "TAP_STR_PORTAL_TOTP_SECRET")
+WYNDHAM_SETTINGS = ("TAP_STR_OKTA_USERNAME", "TAP_STR_CODE_ADDRESS")
+# Ways in whose sessions a login chain hands from run to run (tap_str.tap.CHAINED_PATHS).
+CHAINED_PATHS = ("direct", "wyndham_community")
 
 
 def selected_streams(config: dict[str, Any]) -> list[str]:
@@ -61,6 +64,9 @@ def tap_env(ctx: RunContext, root: Path, streams: list[str]) -> dict[str, str]:
     if access_path == "direct":
         if not ctx.secret_env.get("TAP_STR_USERNAME") or not ctx.secret_env.get("TAP_STR_PASSWORD"):
             raise ReauthRequired("CoStar username and password are not saved on this connection")
+    elif access_path == "wyndham_community":
+        if not all(ctx.secret_env.get(name) for name in WYNDHAM_SETTINGS):
+            raise ReauthRequired("Wyndham Okta username and code inbox are not saved on this connection")
     elif not all(ctx.secret_env.get(name) for name in PORTAL_SECRETS):
         raise ReauthRequired("Portal user ID, password and authenticator secret are not all saved on this connection")
     costar_property_id = str(ctx.config["property_id"])
@@ -79,7 +85,7 @@ def tap_env(ctx: RunContext, root: Path, streams: list[str]) -> dict[str, str]:
             separators=(",", ":"),
         ),
     }
-    if ctx.login_handoff is not None and access_path == "direct":
+    if ctx.login_handoff is not None and access_path in CHAINED_PATHS:
         env["TAP_STR_HANDOFF_PATH"] = str(ctx.login_handoff.path)
     if ctx.config.get("community_views"):
         env["TAP_STR_COMMUNITY_VIEWS"] = json.dumps(list(ctx.config["community_views"]))
@@ -100,7 +106,7 @@ class StrConnector:
     def release_login(self, handoff: LoginHandoff, logger: logging.Logger) -> str:
         """End of a login chain: sign out of CoStar with the handed-over session, headed."""
         from playwright.sync_api import sync_playwright
-        from tap_str import signout
+        from tap_str import portals, signout
 
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=False)
@@ -109,6 +115,9 @@ class StrConnector:
                 page = context.new_page()
                 page.goto(signout.DASHBOARD, wait_until="load", timeout=60_000)
                 how = signout.sign_out(page)
+                if any("wyndham.com" in c.get("domain", "") for c in context.cookies()):
+                    # A Wyndham chain also ends its Okta session.
+                    how += f"; {portals.okta_sign_out(page)}"
             finally:
                 browser.close()
         logger.info("Signed out of CoStar at the end of the login chain (%s)", how)

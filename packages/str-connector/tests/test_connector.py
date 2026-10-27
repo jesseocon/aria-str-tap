@@ -46,7 +46,7 @@ STREAMS = ["str_series", "comp_set_members", "comp_set_response"]
 
 def test_manifest_offers_direct_then_hilton_lobby_for_one_product() -> None:
     m = _manifest()
-    assert [o.key for o in m.auth_options] == ["direct", "hilton_lobby"]
+    assert [o.key for o in m.auth_options] == ["direct", "hilton_lobby", "wyndham_community"]
     # Connections saved before options existed resolve to direct, as before.
     assert m.auth_option(None).key == "direct"
     # Both ways in land on the same STR app, so neither picks a product variant.
@@ -196,3 +196,20 @@ def test_a_login_chain_hands_the_session_to_direct_logins_only(tmp_path) -> None
     lobby.login_handoff = LoginHandoff(tmp_path / "storage_state.json")
     assert "TAP_STR_HANDOFF_PATH" not in tap_env(lobby, Path("/app/str"), STREAMS)
     assert "TAP_STR_HANDOFF_PATH" not in tap_env(_ctx("direct", DIRECT), Path("/app/str"), STREAMS)
+
+
+WYNDHAM = {"TAP_STR_OKTA_USERNAME": "jesse.ocon@wyndham.com", "TAP_STR_CODE_ADDRESS": "wyndham-okta@aria-ingest.com"}
+
+
+def test_wyndham_community_needs_its_okta_username_and_code_inbox_and_chains(tmp_path) -> None:
+    from aria_runner.sdk import LoginHandoff
+
+    option = _manifest().auth_option("wyndham_community")
+    assert [(f.key, f.secret) for f in option.auth.fields] == [("okta_username", False), ("code_address", False)]
+    ctx = _ctx("wyndham_community", WYNDHAM)
+    ctx.login_handoff = LoginHandoff(tmp_path / "storage_state.json")
+    env = tap_env(ctx, Path("/app/str"), STREAMS)
+    assert env["TAP_STR_ACCESS_PATH"] == "wyndham_community"
+    assert env["TAP_STR_HANDOFF_PATH"] == str(tmp_path / "storage_state.json")
+    with pytest.raises(ReauthRequired, match="Okta username and code inbox"):
+        tap_env(_ctx("wyndham_community", {"TAP_STR_OKTA_USERNAME": "jesse.ocon@wyndham.com"}), Path("/app/str"), STREAMS)
