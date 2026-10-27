@@ -9,7 +9,7 @@ from typing import Any
 
 from aria_runner.sdk import ReauthRequired, RunContext, RunResult
 
-from str_connector.manifest import KEY, STREAMS, manifest
+from str_connector.manifest import ENVIRONMENTS, KEY, STREAMS, manifest
 
 DEV_PROJECT = "hospitalityops-dev"
 PROD_PROJECT = "hospitalityops"
@@ -125,7 +125,34 @@ class StrConnector:
         )
 
         bronze_tables = [f"bronze_{org_id}.{table_name(stream, costar_property_id)}" for stream in streams]
-        for environment in [scrape_env]:
+        targets = [e for e in ENVIRONMENTS if e in environments]
+        if targets == list(ENVIRONMENTS):
+            # One scrape serves both warehouses: copy its bronze into production.
+            copy_env = dict(env)
+            copy_env["DBT_BIGQUERY_PROJECT"] = DEV_PROJECT
+            copy_env["DBT_BIGQUERY_DATASET"] = f"silver_{org_id}"
+            _bigquery_auth(copy_env)
+            spec = {
+                "source_project": DEV_PROJECT,
+                "dest_project": PROD_PROJECT,
+                "dataset": f"bronze_{org_id}",
+                "tables": [table.split(".", 1)[1] for table in bronze_tables],
+            }
+            ctx.run_command(
+                [
+                    meltano,
+                    "--environment=development",
+                    "invoke",
+                    "dbt-bigquery:run-operation",
+                    "copy_bronze_tables",
+                    "--args",
+                    json.dumps(spec, separators=(",", ":")),
+                ],
+                env=copy_env,
+                cwd=root,
+                step="copy",
+            )
+        for environment in targets:
             aria_property_id = (
                 ctx.config.get("production_property_id")
                 if environment == "production"
