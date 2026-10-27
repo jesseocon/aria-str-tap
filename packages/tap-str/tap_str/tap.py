@@ -8,6 +8,7 @@ from singer_sdk import typing as th
 
 from singer_playwright.browser import BrowserConfig, BrowserRuntime
 from singer_playwright.progress import report
+from singer_playwright.screenshots import screenshot
 from singer_playwright.sso_login import SsoCredentials
 from singer_playwright.tap import PlaywrightTap
 from tap_str import portals, signout
@@ -182,6 +183,7 @@ class TapStr(PlaywrightTap):
             except Exception as exc:  # noqa: BLE001 - closing the browser still has to happen
                 message = f"Signing out of CoStar failed, closing the browser anyway: {exc}"
                 self.logger.warning("%s", message)
+                screenshot(page, "CoStar sign-out failed", self.logger)
                 report(self.logger, "warning", message=message, code="sign_out_failed")
         else:
             self.logger.info("Signed out of CoStar (never signed in; nothing to sign out)")

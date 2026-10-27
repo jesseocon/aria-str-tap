@@ -7,12 +7,14 @@ plain in-page ``fetch`` to the STR GraphQL endpoint, so the page's cookies apply
 from __future__ import annotations
 
 import sys
+import time
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
 
 from singer_sdk import typing as th
 
+from singer_playwright.login import LoginRejected
 from tap_str.client import StrStream
 from tap_str.community import parse, plan
 
@@ -49,16 +51,55 @@ async ({url, bodies}) => {
 """
 
 
+# CoStar sometimes answers 402 SessionExpired about 5 minutes after sign-in although the next
+# request works (seen 2026-10-26/27: 3 of ~20 runs, each at 4.9 min into str_series). A batch
+# that gets it waits, then is sent again; a session that really ended fails every retry.
+RETRY_WAITS_SECONDS = (5, 15)
+LOGIN_HOST = "secure.costargroup.com"
+
+
 class GraphQLError(RuntimeError):
     pass
 
 
-def graphql(page: Page, bodies: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """POST each body from inside the page; returns each response's ``data``."""
+def _session_expired(result: dict[str, Any]) -> bool:
+    return result.get("status") == 402 or "SessionExpired" in str(result.get("json") or "")
+
+
+def _fetch(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[dict[str, Any]]:
+    results = page.evaluate(FETCH_JS, {"url": plan.GRAPHQL_URL, "bodies": batch})
+    expired = [body["operationName"] for body, result in zip(batch, results, strict=True) if _session_expired(result)]
+    if not expired:
+        return results
+    ops = ", ".join(expired)
+    if stream is not None:
+        stream.screenshot(f"SessionExpired on {ops}")
+    for attempt, wait in enumerate(RETRY_WAITS_SECONDS, start=1):
+        if stream is not None:
+            stream.logger.warning(
+                "CoStar answered SessionExpired on %s; waiting %ss, then retrying (%d of %d)",
+                ops, wait, attempt, len(RETRY_WAITS_SECONDS),
+            )
+        time.sleep(wait)
+        results = page.evaluate(FETCH_JS, {"url": plan.GRAPHQL_URL, "bodies": batch})
+        if not any(_session_expired(result) for result in results):
+            if stream is not None:
+                stream.notice(f"CoStar said SessionExpired on {ops}; retry {attempt} worked", code="session_retry_ok")
+            return results
+    if stream is not None:
+        stream.screenshot(f"SessionExpired on {ops} after {len(RETRY_WAITS_SECONDS)} retries")
+    return results
+
+
+def graphql(page: Page, bodies: list[dict[str, Any]], *, stream: Any = None) -> list[dict[str, Any]]:
+    """POST each body from inside the page; returns each response's ``data``.
+
+    ``stream`` (the calling stream) gets the retry log lines, notices and screenshots.
+    """
     out: list[dict[str, Any]] = []
     for start in range(0, len(bodies), BATCH_SIZE):
         batch = bodies[start : start + BATCH_SIZE]
-        results = page.evaluate(FETCH_JS, {"url": plan.GRAPHQL_URL, "bodies": batch})
+        results = _fetch(page, batch, stream)
         for body, result in zip(batch, results, strict=True):
             payload = result.get("json") or {}
             if result["status"] != 200 or payload.get("errors") or "data" not in payload:
@@ -84,11 +125,44 @@ class Bootstrap:
         return [str(i) for i in (self.members.get("propertySetMembers") or {}).get("memberPropertyIds") or []]
 
 
-def bootstrap(page: Page, config: dict[str, Any]) -> Bootstrap:
+def open_str(page: Page, stream: Any = None) -> None:
+    """Open the STR app once sign-in has settled.
+
+    Right after sign-in CoStar is still redirecting; navigating then is aborted
+    (net::ERR_ABORTED, TownePlace Phoenix Glendale 2026-10-27). Wait for the page to load,
+    retry an aborted load once, and say plainly when CoStar sends us back to its login page.
+    """
+    for attempt in (1, 2):
+        try:
+            page.wait_for_load_state("load", timeout=30_000)
+        except Exception:  # noqa: BLE001 - a slow page still gets the goto below
+            pass
+        if page.url.startswith(STR_HOME):
+            return
+        try:
+            page.goto(STR_HOME, wait_until="domcontentloaded", timeout=90_000)
+        except Exception as exc:
+            if "ERR_ABORTED" not in str(exc) or attempt == 2:
+                if stream is not None:
+                    stream.screenshot("Opening STR failed")
+                raise
+            if stream is not None:
+                stream.screenshot("Opening STR was aborted after sign-in")
+                stream.logger.warning("Opening STR was aborted (%s); waiting 5s, then retrying", str(exc).splitlines()[0])
+            time.sleep(5)
+            continue
+        if LOGIN_HOST in page.url:
+            if stream is not None:
+                stream.screenshot("CoStar returned to its login page")
+            msg = "CoStar returned to its login page after sign-in"
+            raise LoginRejected(msg)
+        return
+
+
+def bootstrap(page: Page, config: dict[str, Any], *, stream: Any = None) -> Bootstrap:
     """Process dates, comp set and members: everything the data calls need."""
     property_id = str(config["property_id"])
-    if not page.url.startswith(STR_HOME):
-        page.goto(STR_HOME, wait_until="domcontentloaded", timeout=90_000)
+    open_str(page, stream)
     today = datetime.now(UTC).date()
     dashboard, detail = graphql(
         page,
@@ -110,14 +184,18 @@ def bootstrap(page: Page, config: dict[str, Any]) -> Bootstrap:
                 {"filter": property_id, "propertyIds": [int(property_id)], "currentProcessDate": plan.iso(today)},
             ),
         ],
+        stream=stream,
     )
     dates = parse.process_dates(dashboard)
     comp_set = parse.pick_comp_set(detail, config.get("comp_set_id"))
-    members, = graphql(page, [plan.bootstrap_body("PropertySetMembers", {"propertySetId": str(comp_set["propertySetId"])})])
+    members, = graphql(
+        page, [plan.bootstrap_body("PropertySetMembers", {"propertySetId": str(comp_set["propertySetId"])})], stream=stream
+    )
     ids = [*[str(i) for i in (members.get("propertySetMembers") or {}).get("memberPropertyIds") or []], property_id]
     details, = graphql(
         page,
         [plan.bootstrap_body("PropertyDetailListV2", {"filter": ids, "currentProcessDate": plan.iso(today)})],
+        stream=stream,
     )
     ctx = plan.RunContext(
         property_id=property_id,
@@ -140,7 +218,7 @@ class CommunityStream(StrStream):
         tap = self._tap
         cached = getattr(tap, "_str_community_bootstrap", None)
         if cached is None:
-            cached = bootstrap(page, dict(self.config))
+            cached = bootstrap(page, dict(self.config), stream=self)
             tap._str_community_bootstrap = cached  # noqa: SLF001 - shared across streams in one run
         return cached
 
@@ -205,7 +283,7 @@ class SeriesStream(CommunityStream):
         extracted_at = datetime.now(UTC).isoformat()
         for start in range(0, len(calls), BATCH_SIZE):
             batch = calls[start : start + BATCH_SIZE]
-            for call, data in zip(batch, graphql(page, [c.body for c in batch]), strict=True):
+            for call, data in zip(batch, graphql(page, [c.body for c in batch], stream=self), strict=True):
                 for row in parse.series_rows(
                     data,
                     view=call.view.name,
@@ -303,5 +381,6 @@ class CompSetResponseStream(CommunityStream):
                     },
                 ),
             ],
+            stream=self,
         )
         yield from parse.response_rows(data, comp_set_id=boot.comp_set_id)
