@@ -190,3 +190,18 @@ def test_the_portal_tab_is_the_one_signed_out() -> None:
     tap.teardown()
     assert not tab.live and first.live
     assert runtime.stopped
+
+
+def test_signing_in_again_happens_once_and_only_for_direct_logins(monkeypatch) -> None:
+    signed_in: list[str] = []
+    monkeypatch.setattr("tap_str.tap.apply_credentials", lambda page, **kw: signed_in.append(kw["username"]))
+    tap, _runtime = _tap(FakePage(DASH, live=False))
+    tap._config = {**tap.config, "username": "u", "password": "p", "access_path": "direct"}  # noqa: SLF001
+    monkeypatch.setattr(type(tap), "egress", property(lambda _self: type("E", (), {"record": lambda *a: None})()))
+    assert tap.sign_in_again("SessionExpired on X") is True
+    assert tap.sign_in_again("SessionExpired on Y") is False
+    assert signed_in == ["u"]
+
+    lobby, _ = _tap(FakePage(DASH))
+    lobby._config = {**lobby.config, "username": "u", "password": "p", "access_path": "hilton_lobby"}  # noqa: SLF001
+    assert lobby.sign_in_again("SessionExpired on X") is False

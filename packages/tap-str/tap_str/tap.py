@@ -11,7 +11,9 @@ from singer_playwright.progress import report
 from singer_playwright.screenshots import screenshot
 from singer_playwright.sso_login import SsoCredentials
 from singer_playwright.tap import PlaywrightTap
+from singer_playwright.login import apply_credentials
 from tap_str import portals, signout
+from tap_str.egress import EgressWatch
 from tap_str.client import StrStream
 from tap_str.community import streams as community
 
@@ -128,6 +130,43 @@ class TapStr(PlaywrightTap):
     ).to_dict()
 
     _portal_page = None
+    _signed_in_again = False
+    _egress: EgressWatch | None = None
+
+    @property
+    def egress(self) -> EgressWatch:
+        if self._egress is None:
+            self._egress = EgressWatch(self.logger)
+        return self._egress
+
+    def sign_in_again(self, reason: str) -> bool:
+        """Once per run, when CoStar has ended the session: sign out what is left, then sign in.
+
+        Direct logins only (the Hilton Lobby path would mean another SSO and authenticator
+        code). Returns False when it will not try, so the caller fails as before.
+        """
+        if self._signed_in_again or self.config.get("access_path", "direct") != "direct":
+            return False
+        runtime = self._browser_runtime
+        if runtime is None or not self.config.get("username") or not self.config.get("password"):
+            return False
+        self._signed_in_again = True
+        page = runtime.page
+        self.logger.warning("Signing in to CoStar again (once this run): %s", reason)
+        try:
+            self.logger.info("Signed out of CoStar before signing in again (%s)", signout.sign_out(page))
+        except Exception as exc:  # noqa: BLE001 - the session is already gone; sign in anyway
+            self.logger.info("Sign-out before signing in again did not complete: %s", exc)
+        apply_credentials(
+            page,
+            username=str(self.config["username"]),
+            password=str(self.config["password"]),
+            login_url=str(self.config.get("login_url") or "https://product.costar.com/"),
+        )
+        self._session_verified = True
+        report(self.logger, "notice", message=f"Signed in to CoStar again after: {reason}", code="signed_in_again")
+        self.egress.record(page, "after signing in again")
+        return True
 
     @override
     def _ensure_browser_started(self) -> None:

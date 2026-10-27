@@ -125,3 +125,50 @@ def test_already_on_str_opens_nothing(waits) -> None:
     page.url = streams.STR_HOME + "/dashboard"
     streams.open_str(page, FakeStream())
     assert page.gotos == 0 and waits == []
+
+
+class FakeEgress:
+    def __init__(self) -> None:
+        self.moments: list[str] = []
+
+    def maybe_record(self, _page) -> None:  # noqa: ANN001
+        self.moments.append("check")
+
+    def record(self, _page, moment: str) -> None:  # noqa: ANN001
+        self.moments.append(moment)
+
+
+class FakeTap:
+    def __init__(self, *, will_sign_in: bool = True) -> None:
+        self.egress = FakeEgress()
+        self.will_sign_in = will_sign_in
+        self.reasons: list[str] = []
+
+    def sign_in_again(self, reason: str) -> bool:
+        self.reasons.append(reason)
+        return self.will_sign_in
+
+
+class TappedStream(FakeStream):
+    def __init__(self, tap: FakeTap) -> None:
+        super().__init__()
+        self._tap = tap
+
+
+def test_a_dead_session_signs_in_again_once_then_resends_the_batch(waits, monkeypatch) -> None:
+    opened: list[object] = []
+    monkeypatch.setattr(streams, "open_str", lambda page, stream=None: opened.append(page))
+    tap = FakeTap()
+    page, stream = FakePage([[EXPIRED], [EXPIRED], [EXPIRED], [OK]]), TappedStream(tap)
+    assert streams.graphql(page, BODIES, stream=stream) == [{"x": 1}, {"x": 1}]
+    assert tap.reasons == ["SessionExpired on SegDayOfWeekTable, DailyTable"]
+    assert opened == [page] and page.calls == 4
+    assert stream.notices[-1][1] == "signed_in_again_ok"
+    assert tap.egress.moments == ["check", "at SessionExpired"]
+
+
+def test_without_signing_in_again_a_dead_session_still_fails(waits) -> None:
+    tap = FakeTap(will_sign_in=False)
+    with pytest.raises(streams.GraphQLError, match="SessionExpired"):
+        streams.graphql(FakePage([[EXPIRED]]), BODIES, stream=TappedStream(tap))
+    assert len(tap.reasons) == 1

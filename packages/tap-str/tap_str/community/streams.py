@@ -66,12 +66,21 @@ def _session_expired(result: dict[str, Any]) -> bool:
     return result.get("status") == 402 or "SessionExpired" in str(result.get("json") or "")
 
 
+def _tap_of(stream: Any) -> Any:
+    return getattr(stream, "_tap", None) if stream is not None else None
+
+
 def _fetch(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[dict[str, Any]]:
+    tap = _tap_of(stream)
+    if tap is not None and hasattr(tap, "egress"):
+        tap.egress.maybe_record(page)
     results = page.evaluate(FETCH_JS, {"url": plan.GRAPHQL_URL, "bodies": batch})
     expired = [body["operationName"] for body, result in zip(batch, results, strict=True) if _session_expired(result)]
     if not expired:
         return results
     ops = ", ".join(expired)
+    if tap is not None and hasattr(tap, "egress"):
+        tap.egress.record(page, "at SessionExpired")
     if stream is not None:
         stream.screenshot(f"SessionExpired on {ops}")
     for attempt, wait in enumerate(RETRY_WAITS_SECONDS, start=1):
@@ -88,6 +97,15 @@ def _fetch(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[
             return results
     if stream is not None:
         stream.screenshot(f"SessionExpired on {ops} after {len(RETRY_WAITS_SECONDS)} retries")
+    # The session really ended (2026-10-27: the dashboard asked for login at sign-out).
+    # Sign out what is left and sign in once more, then resend this batch.
+    if tap is not None and hasattr(tap, "sign_in_again") and tap.sign_in_again(f"SessionExpired on {ops}"):
+        open_str(page, stream)
+        results = page.evaluate(FETCH_JS, {"url": plan.GRAPHQL_URL, "bodies": batch})
+        if not any(_session_expired(result) for result in results):
+            stream.notice(f"Signing in again after SessionExpired on {ops} worked", code="signed_in_again_ok")
+        else:
+            stream.screenshot(f"SessionExpired on {ops} even after signing in again")
     return results
 
 
@@ -163,6 +181,9 @@ def bootstrap(page: Page, config: dict[str, Any], *, stream: Any = None) -> Boot
     """Process dates, comp set and members: everything the data calls need."""
     property_id = str(config["property_id"])
     open_str(page, stream)
+    tap = _tap_of(stream)
+    if tap is not None and hasattr(tap, "egress"):
+        tap.egress.record(page, "at sign-in")
     today = datetime.now(UTC).date()
     dashboard, detail = graphql(
         page,
