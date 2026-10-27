@@ -137,7 +137,7 @@ plugins:
     - name: comp_set_id
       kind: string
     - name: query_pause_seconds
-      kind: number
+      kind: integer
       value: 4
     - name: storage_state_path
       kind: string
