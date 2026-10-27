@@ -10,7 +10,7 @@ readme = "README.md"
 authors = [{ name = "Jesse Ocon", email = "jesse.ocon@growthnirvana.com" }]
 requires-python = ">=3.10"
 dependencies = [
-    "singer-playwright @ git+https://github.com/jesseocon/aria-singer-playwright.git@v0.2.0",
+    "singer-playwright @ git+https://github.com/jesseocon/aria-singer-playwright.git@v0.3.0",
     "singer-sdk~=0.54.5",
     "typing-extensions>=4.5.0; python_version < '3.13'",
 ]
