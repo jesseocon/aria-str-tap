@@ -182,3 +182,17 @@ def test_production_only_scrapes_straight_into_production(tmp_path, monkeypatch)
 
     assert [step for _cmd, step in runs] == ["extract", "transform"]
     assert all("--environment=production" in cmd for cmd, _step in runs)
+
+
+def test_a_login_chain_hands_the_session_to_direct_logins_only(tmp_path) -> None:
+    from aria_runner.sdk import LoginHandoff
+
+    m = _manifest()
+    assert m.chain_login_runs is True and m.job.timeout_seconds == 8 * 3600
+    ctx = _ctx("direct", DIRECT)
+    ctx.login_handoff = LoginHandoff(tmp_path / "storage_state.json")
+    assert tap_env(ctx, Path("/app/str"), STREAMS)["TAP_STR_HANDOFF_PATH"] == str(tmp_path / "storage_state.json")
+    lobby = _ctx("hilton_lobby", PORTAL)
+    lobby.login_handoff = LoginHandoff(tmp_path / "storage_state.json")
+    assert "TAP_STR_HANDOFF_PATH" not in tap_env(lobby, Path("/app/str"), STREAMS)
+    assert "TAP_STR_HANDOFF_PATH" not in tap_env(_ctx("direct", DIRECT), Path("/app/str"), STREAMS)

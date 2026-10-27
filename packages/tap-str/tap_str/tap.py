@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from pathlib import Path
 
 from singer_sdk import typing as th
 
@@ -113,6 +115,11 @@ class TapStr(PlaywrightTap):
             description="STR comp set (propertySetId). Default: the performance set.",
         ),
         th.Property(
+            "handoff_path",
+            th.StringType(nullable=True),
+            description="Login chain only: memory-only file for the signed-in browser state between runs.",
+        ),
+        th.Property(
             "query_pause_seconds",
             th.NumberType(nullable=False),
             default=4.0,
@@ -175,10 +182,42 @@ class TapStr(PlaywrightTap):
         return True
 
     @override
+    @property
+    def handoff_path(self) -> Path | None:
+        """Where a login chain hands the signed-in browser state between runs (direct logins)."""
+        raw = self.config.get("handoff_path")
+        if not raw or self.config.get("access_path", "direct") != "direct":
+            return None
+        return Path(str(raw))
+
+    def _start_from_handoff(self, path: Path) -> bool:
+        """Start signed in with the previous run's browser state. False when CoStar wants a login."""
+        self._browser_runtime = BrowserRuntime(
+            BrowserConfig(storage_state_path=str(path), headless=bool(self.config.get("headless", True))),
+        )
+        self._browser_runtime.start()
+        page = self._browser_runtime.page
+        if signout.session_closed(page):
+            self.logger.info("The handed-over CoStar session has ended; signing in with the password")
+            self._browser_runtime.stop()
+            self._browser_runtime = None
+            return False
+        self._session_verified = True
+        self.logger.info("Started signed in to CoStar with the previous run's session (no new sign-in)")
+        return True
+
     def _ensure_browser_started(self) -> None:
         access_path = self.config.get("access_path", "direct")
-        if access_path == "direct" or self._browser_runtime is not None:
+        if self._browser_runtime is not None:
+            return
+        handoff = self.handoff_path
+        if access_path == "direct" and handoff is not None and handoff.is_file() and handoff.stat().st_size:
+            if self._start_from_handoff(handoff):
+                return
+        if access_path == "direct":
             super()._ensure_browser_started()
+            if self._session_verified:
+                self.logger.info("Signed in to CoStar with the password")
             return
         enter = portals.PORTALS[access_path]
         missing = [k for k in ("portal_username", "portal_password", "portal_totp_secret") if not self.config.get(k)]
@@ -220,7 +259,18 @@ class TapStr(PlaywrightTap):
     def teardown(self) -> None:
         runtime = self._browser_runtime
         # Every run's log says what happened to its CoStar session, success or not.
-        if runtime is not None and self._session_verified:
+        handoff = self.handoff_path
+        if runtime is not None and self._session_verified and handoff is not None:
+            # A login chain: hand the session to the next run; the chain signs out at its end.
+            try:
+                partial = handoff.with_name(handoff.name + ".part")
+                runtime.context.storage_state(path=str(partial))
+                os.replace(partial, handoff)
+                self.logger.info("Handed the CoStar session to the next run (the login chain signs out at its end)")
+            except Exception as exc:  # noqa: BLE001 - fall back to signing out here
+                self.logger.warning("Could not hand the CoStar session on (%s); signing out instead", exc)
+                handoff = None
+        if runtime is not None and self._session_verified and handoff is None:
             page = self._portal_page if self._portal_page is not None and not self._portal_page.is_closed() else runtime.page
             try:
                 how = signout.sign_out(page)
@@ -230,7 +280,7 @@ class TapStr(PlaywrightTap):
                 self.logger.warning("%s", message)
                 screenshot(page, "CoStar sign-out failed", self.logger)
                 report(self.logger, "warning", message=message, code="sign_out_failed")
-        else:
+        elif runtime is None or not self._session_verified:
             self.logger.info("Signed out of CoStar (never signed in; nothing to sign out)")
         self._portal_page = None
         # PlaywrightTap.teardown ends in super().teardown(), which singer-sdk's Tap does not have.

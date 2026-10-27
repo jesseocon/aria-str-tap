@@ -73,8 +73,11 @@ def manifest() -> dict[str, Any]:
         "logo": "/logos/str.png",
         "version": _version(),
         "description": "CoStar STR daily occupancy, ADR, RevPAR, comp set, and index.",
-        "job": {"name": "aria-connector-str", "timeout_seconds": 3 * 3600},
+        # Long enough for a whole login's weekly queue in one chain (about 30 hotels x 11 min).
+        "job": {"name": "aria-connector-str", "timeout_seconds": 8 * 3600},
         "progress": "v1",
+        # One sign-in for a login's queue: runs hand the session on in memory, the chain signs out.
+        "chain_login_runs": True,
         # Ways in to the same STR app. The first option is the default for connections saved before options.
         "auth_options": [
             {"key": "direct", "title": "CoStar username and password", "auth": DIRECT_AUTH},

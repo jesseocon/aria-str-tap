@@ -139,6 +139,8 @@ plugins:
     - name: query_pause_seconds
       kind: integer
       value: 4
+    - name: handoff_path
+      kind: string
     - name: storage_state_path
       kind: string
       sensitive: true
