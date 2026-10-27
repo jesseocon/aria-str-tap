@@ -164,6 +164,10 @@ plugins:
   - name: dbt-bigquery
     variant: dbt-labs
     pip_url: dbt-core dbt-bigquery meltano-dbt-ext~=0.5.0
+    commands:
+      run-operation:
+        args: run-operation
+        description: Invoke a dbt macro (used to copy bronze into production).
     config:
       project: hospitalityops-dev
       dataset: silver_1782243883257222643

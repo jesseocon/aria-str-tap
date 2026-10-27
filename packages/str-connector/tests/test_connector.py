@@ -144,3 +144,41 @@ def test_run_names_its_steps_and_declares_the_progress_contract(tmp_path, monkey
     StrConnector().run(ctx)
     assert steps == ["extract", "transform"]
     assert _manifest().progress == "v1"
+
+
+def test_both_warehouses_copy_bronze_then_build_each(tmp_path, monkeypatch) -> None:
+    from str_connector.runtime import StrConnector
+
+    monkeypatch.setenv("STR_PROJECT_ROOT", str(tmp_path))
+    runs: list[tuple[list[str], str | None]] = []
+    ctx = _ctx("direct", DIRECT, environments=["production", "development"], production_property_id="p2")
+    ctx.run_command = lambda cmd, **kw: runs.append((cmd, kw.get("step")))  # type: ignore[method-assign]
+    StrConnector().run(ctx)
+
+    assert [step for _cmd, step in runs] == ["extract", "copy", "transform", "transform"]
+    load, copy, dev, prod = (cmd for cmd, _step in runs)
+    assert "--environment=development" in load
+    spec = json.loads(copy[-1])
+    assert spec == {
+        "source_project": "hospitalityops-dev",
+        "dest_project": "hospitalityops",
+        "dataset": "bronze_42",
+        "tables": [f"mlt_str__{s}_1514908" for s in STREAMS],
+    }
+    assert "--environment=development" in dev and json.loads(dev[-1])["property_id"] == "p1"
+    assert "--environment=production" in prod
+    prod_vars = json.loads(prod[-1])
+    assert (prod_vars["bq_project"], prod_vars["property_id"]) == ("hospitalityops", "p2")
+
+
+def test_production_only_scrapes_straight_into_production(tmp_path, monkeypatch) -> None:
+    from str_connector.runtime import StrConnector
+
+    monkeypatch.setenv("STR_PROJECT_ROOT", str(tmp_path))
+    runs: list[tuple[list[str], str | None]] = []
+    ctx = _ctx("direct", DIRECT, environments=["production"], production_property_id="p2")
+    ctx.run_command = lambda cmd, **kw: runs.append((cmd, kw.get("step")))  # type: ignore[method-assign]
+    StrConnector().run(ctx)
+
+    assert [step for _cmd, step in runs] == ["extract", "transform"]
+    assert all("--environment=production" in cmd for cmd, _step in runs)
