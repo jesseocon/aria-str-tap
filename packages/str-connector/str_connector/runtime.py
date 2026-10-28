@@ -114,10 +114,14 @@ class StrConnector:
                 context = browser.new_context(storage_state=str(handoff.path), viewport={"width": 1600, "height": 1000})
                 page = context.new_page()
                 page.goto(signout.DASHBOARD, wait_until="load", timeout=60_000)
+                okta = any("wyndham.com" in c.get("domain", "") for c in context.cookies())
                 how = signout.sign_out(page)
-                if any("wyndham.com" in c.get("domain", "") for c in context.cookies()):
-                    # A Wyndham chain also ends its Okta session.
-                    how += f"; {portals.okta_sign_out(page)}"
+                if okta:
+                    # A Wyndham chain also ends its Okta session; CoStar's result is kept either way.
+                    try:
+                        how += f"; {portals.okta_sign_out(page)}"
+                    except Exception as exc:  # noqa: BLE001
+                        how += f"; Okta sign-out failed: {exc}"
             finally:
                 browser.close()
         logger.info("Signed out of CoStar at the end of the login chain (%s)", how)

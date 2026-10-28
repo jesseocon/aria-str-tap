@@ -91,7 +91,14 @@ class SessionPage:
         self.deleted = False
 
     def goto(self, url: str, **_kw) -> None:
-        self.url = url if self.live else "https://sign-in.wyndham.com/oauth2/v1/authorize?client_id=okta"
+        # Okta's dashboard always loads first; its script redirects when there is no session.
+        self.url = url
+
+    def wait_for_url(self, predicate, **_kw) -> None:  # noqa: ANN001
+        if not self.live:
+            self.url = "https://sign-in.wyndham.com/oauth2/v1/authorize?client_id=okta"
+        if not predicate(self.url):
+            raise TimeoutError(self.url)
 
     def evaluate(self, script: str) -> int:
         assert "DELETE" in script and "/api/v1/sessions/me" in script
