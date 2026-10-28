@@ -141,6 +141,10 @@ OKTA_CODE_INSTEAD = "button.enter-auth-code-instead-link"
 OKTA_CODE = 'input[name="credentials.passcode"]'
 OKTA_VERIFY = 'input[type="submit"][value="Verify"]'
 CODE_WAIT_S = 240
+# CoStar sometimes shows "You are almost done! ... process your Benchmark registration" on the
+# hand-off page (seen 2026-10-27) and redirects to STR by itself in about 10 minutes.
+REGISTRATION_TEXT = "process your Benchmark registration"
+REGISTRATION_WAIT_S = 15 * 60
 
 
 @dataclass(frozen=True)
@@ -195,6 +199,13 @@ def okta_sign_out(page: Page, *, timeout_ms: int = 30_000) -> str:
     return "Okta session ended; confirmed: the dashboard asks for sign-in"
 
 
+def _registering(page: Page) -> bool:
+    try:
+        return REGISTRATION_TEXT in page.evaluate("() => document.body ? document.body.innerText : ''")
+    except Exception:  # noqa: BLE001 - an unreadable page is not the registration page
+        return False
+
+
 def wyndham_community(page: Page, creds: OktaEmailCodeCredentials, *, timeout_s: float = 240) -> Page:
     """Okta (emailed code) -> CoStar's STR hand-off -> STR, all in this tab."""
     try:
@@ -205,7 +216,14 @@ def wyndham_community(page: Page, creds: OktaEmailCodeCredentials, *, timeout_s:
     for attempt in range(1, HANDOFF_ATTEMPTS + 1):
         try:
             page.goto(WYNDHAM_STR_HANDOFF, wait_until="domcontentloaded", timeout=90_000)
-            page.wait_for_url(lambda url: url.startswith(STR_PREFIX), timeout=timeout_s * 1000)
+            try:
+                page.wait_for_url(lambda url: url.startswith(STR_PREFIX), timeout=timeout_s * 1000)
+            except Exception:
+                if not _registering(page):
+                    raise
+                # CoStar is setting up the Benchmark account and will redirect on its own.
+                log.warning("CoStar is processing a Benchmark registration; waiting up to %d minutes", REGISTRATION_WAIT_S // 60)
+                page.wait_for_url(lambda url: url.startswith(STR_PREFIX), timeout=REGISTRATION_WAIT_S * 1000)
             page.wait_for_load_state("domcontentloaded")
             log.info("Wyndham: on CoStar STR%s", "" if attempt == 1 else f" (attempt {attempt})")
             return page
