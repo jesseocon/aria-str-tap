@@ -180,10 +180,23 @@ def okta_email_code_sign_in(page: Page, creds: OktaEmailCodeCredentials, *, time
     log.info("Wyndham: signed in to Okta")
 
 
-def okta_sign_out(page: Page, *, timeout_ms: int = 30_000) -> str:
-    """End the Okta session the way the portal does (DELETE /api/v1/sessions/me), and confirm."""
+def _okta_dashboard_redirects(page: Page, timeout_ms: int) -> bool:
+    """Open Okta's dashboard; True when it redirects to sign-in (no session).
+
+    The dashboard address loads first and its own script redirects a moment later, so the
+    URL right after loading proves nothing: wait for the redirect.
+    """
     page.goto(f"{WYNDHAM_SIGN_IN}/app/UserHome", wait_until="domcontentloaded", timeout=timeout_ms)
-    if "/app/UserHome" not in page.url:
+    try:
+        page.wait_for_url(lambda url: "/app/UserHome" not in url, timeout=timeout_ms)
+    except Exception:  # noqa: BLE001 - still on the dashboard: signed in
+        return False
+    return True
+
+
+def okta_sign_out(page: Page, *, timeout_ms: int = 15_000) -> str:
+    """End the Okta session the way the portal does (DELETE /api/v1/sessions/me), and confirm."""
+    if _okta_dashboard_redirects(page, timeout_ms):
         return "Okta session had already ended"
     status = page.evaluate(
         """async () => {
@@ -192,8 +205,7 @@ def okta_sign_out(page: Page, *, timeout_ms: int = 30_000) -> str:
           return resp.status;
         }"""
     )
-    page.goto(f"{WYNDHAM_SIGN_IN}/app/UserHome", wait_until="domcontentloaded", timeout=timeout_ms)
-    if "/app/UserHome" in page.url:
+    if not _okta_dashboard_redirects(page, timeout_ms):
         msg = f"Okta still open after sign-out (status {status})"
         raise LoginRejected(msg)
     return "Okta session ended; confirmed: the dashboard asks for sign-in"
