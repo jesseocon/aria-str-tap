@@ -60,6 +60,13 @@ RETRY_WAITS_SECONDS = (5, 15)
 # wait a random 0.5x-1.5x of query_pause_seconds (config, default 4) between each other.
 QUERY_PAUSE_SECONDS = 4.0
 LOGIN_HOST = "secure.costargroup.com"
+# CoStar's page signs itself out after 2 hours without mouse or keyboard input, however many
+# queries it sends (2026-10-28: signed in 11:03:38, sent to /app/signout?r=InactivityTimeout at
+# 13:03:45, mid str_series, Hotel Phillips). The session itself lived on: the next hotel in the
+# chain reopened STR with it. So a batch that loses its page reopens STR and is sent again, and
+# the pauses between batches move the mouse like a person reading the views.
+INACTIVITY_SIGNOUT = "InactivityTimeout"
+PAGE_GONE = "Execution context was destroyed"
 
 
 class GraphQLError(RuntimeError):
@@ -74,11 +81,44 @@ def _tap_of(stream: Any) -> Any:
     return getattr(stream, "_tap", None) if stream is not None else None
 
 
+def _reopen_str(page: Page, stream: Any, reason: str) -> None:
+    """Open STR again on the same session; sign in again (direct logins, once) if it has ended."""
+    try:
+        open_str(page, stream)
+    except LoginRejected:
+        tap = _tap_of(stream)
+        if tap is None or not hasattr(tap, "sign_in_again") or not tap.sign_in_again(reason):
+            raise
+        open_str(page, stream)
+
+
+def _evaluate(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[dict[str, Any]]:
+    """Send a batch; when the page navigates away mid-batch, reopen STR and send it once more."""
+    try:
+        return page.evaluate(FETCH_JS, {"url": plan.GRAPHQL_URL, "bodies": batch})
+    except Exception as exc:
+        if PAGE_GONE not in str(exc):
+            raise
+    where = page.url
+    if INACTIVITY_SIGNOUT in where:
+        reason = "CoStar signed the page out for inactivity"
+    else:
+        reason = f"The page navigated away from STR ({where})"
+    if stream is not None:
+        stream.screenshot(reason)
+        stream.logger.warning("%s; reopening STR and sending the batch again", reason)
+    _reopen_str(page, stream, reason)
+    results = page.evaluate(FETCH_JS, {"url": plan.GRAPHQL_URL, "bodies": batch})
+    if stream is not None:
+        stream.notice(f"{reason}; reopening STR worked", code="reopened_str")
+    return results
+
+
 def _fetch(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[dict[str, Any]]:
     tap = _tap_of(stream)
     if tap is not None and hasattr(tap, "egress"):
         tap.egress.maybe_record(page)
-    results = page.evaluate(FETCH_JS, {"url": plan.GRAPHQL_URL, "bodies": batch})
+    results = _evaluate(page, batch, stream)
     expired = [body["operationName"] for body, result in zip(batch, results, strict=True) if _session_expired(result)]
     if not expired:
         return results
@@ -94,7 +134,7 @@ def _fetch(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[
                 ops, wait, attempt, len(RETRY_WAITS_SECONDS),
             )
         time.sleep(wait)
-        results = page.evaluate(FETCH_JS, {"url": plan.GRAPHQL_URL, "bodies": batch})
+        results = _evaluate(page, batch, stream)
         if not any(_session_expired(result) for result in results):
             if stream is not None:
                 stream.notice(f"CoStar said SessionExpired on {ops}; retry {attempt} worked", code="session_retry_ok")
@@ -105,7 +145,7 @@ def _fetch(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[
     # Sign out what is left and sign in once more, then resend this batch.
     if tap is not None and hasattr(tap, "sign_in_again") and tap.sign_in_again(f"SessionExpired on {ops}"):
         open_str(page, stream)
-        results = page.evaluate(FETCH_JS, {"url": plan.GRAPHQL_URL, "bodies": batch})
+        results = _evaluate(page, batch, stream)
         if not any(_session_expired(result) for result in results):
             stream.notice(f"Signing in again after SessionExpired on {ops} worked", code="signed_in_again_ok")
         else:
@@ -113,13 +153,34 @@ def _fetch(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[
     return results
 
 
-def pause(stream: Any = None) -> None:
-    """Wait between query batches like a person between views (random, so not a fixed beat)."""
+def move_mouse(page: Page | None) -> None:
+    """Drift the mouse to a random spot on the page, as a person does while reading."""
+    if page is None:
+        return
+    try:
+        size = page.viewport_size or {"width": 1280, "height": 800}
+        x = random.uniform(0.2, 0.8) * size["width"]
+        y = random.uniform(0.3, 0.8) * size["height"]
+        page.mouse.move(x, y, steps=random.randint(5, 15))
+    except Exception:  # noqa: BLE001 - never fail a run over the mouse
+        return
+
+
+def pause(stream: Any = None, page: Page | None = None) -> None:
+    """Wait between query batches like a person between views (random, so not a fixed beat).
+
+    With ``page``, the mouse moves partway through, which keeps CoStar's inactivity sign-out away.
+    """
     tap = _tap_of(stream)
     config = getattr(tap, "config", None) or {}
     base = float(config.get("query_pause_seconds", QUERY_PAUSE_SECONDS))
     if base > 0:
-        time.sleep(random.uniform(0.5 * base, 1.5 * base))
+        wait = random.uniform(0.5 * base, 1.5 * base)
+        time.sleep(wait / 2)
+        move_mouse(page)
+        time.sleep(wait / 2)
+    else:
+        move_mouse(page)
 
 
 def graphql(page: Page, bodies: list[dict[str, Any]], *, stream: Any = None) -> list[dict[str, Any]]:
@@ -131,7 +192,7 @@ def graphql(page: Page, bodies: list[dict[str, Any]], *, stream: Any = None) -> 
     for start in range(0, len(bodies), BATCH_SIZE):
         batch = bodies[start : start + BATCH_SIZE]
         if start:
-            pause(stream)
+            pause(stream, page)
         results = _fetch(page, batch, stream)
         for body, result in zip(batch, results, strict=True):
             payload = result.get("json") or {}
@@ -320,7 +381,7 @@ class SeriesStream(CommunityStream):
         for start in range(0, len(calls), BATCH_SIZE):
             batch = calls[start : start + BATCH_SIZE]
             if start:
-                pause(self)
+                pause(self, page)
             for call, data in zip(batch, graphql(page, [c.body for c in batch], stream=self), strict=True):
                 for row in parse.series_rows(
                     data,
