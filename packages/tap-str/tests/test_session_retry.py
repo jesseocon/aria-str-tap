@@ -181,8 +181,76 @@ def test_query_batches_pause_a_random_human_interval_between_them(monkeypatch) -
     tap.config = {"query_pause_seconds": 4}
     bodies = [{"operationName": f"Op{i}"} for i in range(10)]  # 3 batches of up to 4
     streams.graphql(FakePage([[OK]]), bodies, stream=TappedStream(tap))
-    assert len(slept) == 2 and all(2.0 <= s <= 6.0 for s in slept)
+    pauses = [slept[i] + slept[i + 1] for i in range(0, len(slept), 2)]  # each pause is split by a mouse move
+    assert len(pauses) == 2 and all(2.0 <= s <= 6.0 for s in pauses)
     tap.config = {"query_pause_seconds": 0}
     slept.clear()
     streams.graphql(FakePage([[OK]]), bodies, stream=TappedStream(tap))
     assert slept == []
+
+
+SIGNED_OUT_URL = "https://product.costar.com/app/signout?r=InactivityTimeout&return_path=%2Fapp%2Fstr%2Fdashboard"
+
+
+class LeavingPage(FakePage):
+    """The first batch dies when CoStar's inactivity sign-out navigates the page away."""
+
+    def __init__(self) -> None:
+        super().__init__([[OK]])
+        self.url = SIGNED_OUT_URL
+        self.left = False
+
+    def evaluate(self, js: str, args: dict) -> list[dict]:
+        if not self.left:
+            self.left = True
+            msg = "Page.evaluate: Execution context was destroyed, most likely because of a navigation."
+            raise RuntimeError(msg)
+        return super().evaluate(js, args)
+
+
+def test_an_inactivity_sign_out_reopens_str_and_resends_the_batch(waits, monkeypatch) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(streams, "open_str", lambda page, stream=None: opened.append(page.url))
+    page, stream = LeavingPage(), FakeStream()
+    assert streams.graphql(page, BODIES, stream=stream) == [{"x": 1}, {"x": 1}]
+    assert opened == [SIGNED_OUT_URL]
+    assert stream.screens == ["CoStar signed the page out for inactivity"]
+    assert stream.notices[0][1] == "reopened_str"
+
+
+def test_a_page_that_reopens_on_the_login_page_signs_in_again(waits, monkeypatch) -> None:
+    calls: list[str] = []
+
+    def open_str(page, stream=None) -> None:
+        calls.append("open")
+        if len(calls) == 1:
+            raise LoginRejected("CoStar returned to its login page after sign-in")
+
+    class Tap:
+        def sign_in_again(self, reason: str) -> bool:
+            calls.append(f"sign in: {reason}")
+            return True
+
+    monkeypatch.setattr(streams, "open_str", open_str)
+    page, stream = LeavingPage(), FakeStream()
+    stream._tap = Tap()
+    streams.graphql(page, BODIES, stream=stream)
+    assert calls == ["open", "sign in: CoStar signed the page out for inactivity", "open"]
+
+
+def test_pauses_move_the_mouse(waits) -> None:
+    class Mouse:
+        moves: list[tuple[float, float]] = []
+
+        def move(self, x: float, y: float, *, steps: int) -> None:
+            assert steps >= 5
+            self.moves.append((x, y))
+
+    class Page:
+        viewport_size = {"width": 1000, "height": 600}
+        mouse = Mouse()
+
+    streams.pause(None, Page())
+    assert len(Mouse.moves) == 1 and len(waits) == 2
+    x, y = Mouse.moves[0]
+    assert 200 <= x <= 800 and 180 <= y <= 480
