@@ -110,3 +110,35 @@ def test_okta_sign_out_reports_an_ended_session_and_refuses_a_stuck_one() -> Non
     assert portals.okta_sign_out(SessionPage(live=False)) == "Okta session had already ended"
     with pytest.raises(portals.LoginRejected, match="still open"):
         portals.okta_sign_out(SessionPage(live=True, ends=False))
+
+
+class RegisteringPage(OktaPage):
+    """The hand-off shows CoStar's Benchmark registration page, then redirects to STR."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.waits: list[float] = []
+
+    def goto(self, url: str, **kw) -> None:
+        super().goto(url, **kw)
+        if url == portals.WYNDHAM_STR_HANDOFF:
+            self.url = "https://www.costar.com/str-user-registration/auth/validate?mode=wyndham"
+
+    def wait_for_url(self, predicate, *, timeout: float = 0, **_kw) -> None:  # noqa: ANN001
+        if "str-user-registration" in self.url:
+            self.waits.append(timeout)
+            if timeout < portals.REGISTRATION_WAIT_S * 1000:
+                raise TimeoutError(self.url)  # the normal wait runs out
+            self.url = "https://product.costar.com/app/str/dashboard"  # CoStar redirects by itself
+        super().wait_for_url(predicate)
+
+    def evaluate(self, _script: str) -> str:
+        return "You are almost done! Please allow approximately 10 minutes for us to process your Benchmark registration."
+
+
+def test_a_benchmark_registration_page_is_waited_out_not_failed(monkeypatch) -> None:
+    monkeypatch.setattr(portals, "wait_for_code", lambda *_a, **_kw: "482915")
+    page = RegisteringPage()
+    assert portals.wyndham_community(page, CREDS) is page
+    assert page.url.startswith(portals.STR_PREFIX)
+    assert page.waits[-1] == portals.REGISTRATION_WAIT_S * 1000
