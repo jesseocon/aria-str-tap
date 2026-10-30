@@ -7,7 +7,7 @@ steps:
     args:
       - build
       - --build-arg
-      - ARIA_RUNNER_IMAGE=us-central1-docker.pkg.dev/hospitalityops/aria/aria-runner:0.1.24
+      - ARIA_RUNNER_IMAGE=us-central1-docker.pkg.dev/hospitalityops/aria/aria-runner:0.1.25
       - --build-arg
       - BUILDKIT_INLINE_CACHE=1
       - --cache-from
