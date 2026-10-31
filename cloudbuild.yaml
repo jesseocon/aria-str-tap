@@ -7,18 +7,18 @@ steps:
     args:
       - build
       - --build-arg
-      - ARIA_RUNNER_IMAGE=us-central1-docker.pkg.dev/hospitalityops/aria/aria-runner:0.1.25
+      - ARIA_RUNNER_IMAGE=us-central1-docker.pkg.dev/hospitalityops/aria/aria-runner:0.1.27
       - --build-arg
       - BUILDKIT_INLINE_CACHE=1
       - --cache-from
       - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:latest
       - -t
-      - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.30
+      - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.31
       - -t
       - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:latest
       - .
 images:
-  - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.30
+  - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.31
   - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:latest
 options:
   machineType: E2_HIGHCPU_8
