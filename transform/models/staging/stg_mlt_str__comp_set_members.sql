@@ -7,12 +7,15 @@
 
 -- Latest details per comp set hotel, plus when it was first and last seen in the set, so a
 -- hotel leaving or joining the comp set is visible (is_current = in the most recent run).
+-- A run is its load batch: each row's _sdc_extracted_at differs by microseconds within one run,
+-- so comparing those would leave only the last-extracted hotel current.
 WITH runs AS (
   SELECT
     *,
     MIN(_sdc_extracted_at) OVER (PARTITION BY comp_set_id, property_id) AS first_seen_at,
     MAX(_sdc_extracted_at) OVER (PARTITION BY comp_set_id, property_id) AS last_seen_at,
-    MAX(_sdc_extracted_at) OVER (PARTITION BY comp_set_id) AS latest_run_at
+    MAX(_sdc_batched_at) OVER (PARTITION BY comp_set_id, property_id) AS last_seen_run,
+    MAX(_sdc_batched_at) OVER (PARTITION BY comp_set_id) AS latest_run
   FROM {{ source('mlt_str', 'comp_set_members') }}
 ),
 
@@ -54,5 +57,5 @@ SELECT
   operating_status,
   first_seen_at,
   last_seen_at,
-  last_seen_at = latest_run_at AS is_current
+  last_seen_run = latest_run AS is_current
 FROM latest
