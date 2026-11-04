@@ -56,6 +56,12 @@ async ({url, bodies}) => {
 # request works (seen 2026-10-26/27: 3 of ~20 runs, each at 4.9 min into str_series). A batch
 # that gets it waits, then is sent again; a session that really ended fails every retry.
 RETRY_WAITS_SECONDS = (5, 15)
+# CoStar can also answer 401 MissingCredentials when a query goes out before the STR app has set
+# up its session (2026-11-04, Daytona: 0.4 s after landing on STR, the page still blank). Those
+# batches reopen STR, then take the same waits and retries.
+MISSING_CREDENTIALS = "MissingCredentials"
+# How long opening STR waits for the app to draw something before queries go out.
+APP_READY_TIMEOUT_MS = 30_000
 # A person moving through STAR views takes a few seconds between them. Batches of queries
 # wait a random 0.5x-1.5x of query_pause_seconds (config, default 4) between each other.
 QUERY_PAUSE_SECONDS = 4.0
@@ -74,17 +80,35 @@ class GraphQLError(RuntimeError):
 
 
 def _session_expired(result: dict[str, Any]) -> bool:
-    return result.get("status") == 402 or "SessionExpired" in str(result.get("json") or "")
+    return result.get("status") == 402 or "SessionExpired" in str(result.get("json") or "") or _missing_credentials(result)
+
+
+def _missing_credentials(result: dict[str, Any]) -> bool:
+    return result.get("status") == 401 and MISSING_CREDENTIALS in str(result.get("json") or "")
+
+
+def describe_page(page: Page) -> str:
+    """Where the page is and which CoStar cookies it holds (names only), for failure logs."""
+    try:
+        url = page.url.split("?", 1)[0]
+        title = page.title()
+        text = page.evaluate("() => document.body ? document.body.innerText.trim().length : -1")
+        names = sorted(
+            {c["name"] for c in page.context.cookies() if "costar" in c.get("domain", "")}
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics must not hide the failure
+        return f"page could not be described ({exc})"
+    return f"url={url} title={title!r} text_chars={text} costar_cookies={names}"
 
 
 def _tap_of(stream: Any) -> Any:
     return getattr(stream, "_tap", None) if stream is not None else None
 
 
-def _reopen_str(page: Page, stream: Any, reason: str) -> None:
+def _reopen_str(page: Page, stream: Any, reason: str, *, reload: bool = False) -> None:
     """Open STR again on the same session; sign in again (direct logins, once) if it has ended."""
     try:
-        open_str(page, stream)
+        open_str(page, stream, reload=reload)
     except LoginRejected:
         tap = _tap_of(stream)
         if tap is None or not hasattr(tap, "sign_in_again") or not tap.sign_in_again(reason):
@@ -123,21 +147,27 @@ def _fetch(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[
     if not expired:
         return results
     ops = ", ".join(expired)
+    not_ready = any(_missing_credentials(result) for result in results)
+    said = MISSING_CREDENTIALS if not_ready else "SessionExpired"
     if tap is not None and hasattr(tap, "egress"):
         tap.egress.record(page, "at SessionExpired")
     if stream is not None:
         stream.screenshot(f"SessionExpired on {ops}")
+        stream.logger.warning("CoStar refused %s: %s", ops, describe_page(page))
     for attempt, wait in enumerate(RETRY_WAITS_SECONDS, start=1):
         if stream is not None:
             stream.logger.warning(
-                "CoStar answered SessionExpired on %s; waiting %ss, then retrying (%d of %d)",
-                ops, wait, attempt, len(RETRY_WAITS_SECONDS),
+                "CoStar answered %s on %s; waiting %ss, then retrying (%d of %d)",
+                MISSING_CREDENTIALS if not_ready else "SessionExpired", ops, wait, attempt, len(RETRY_WAITS_SECONDS),
             )
         time.sleep(wait)
+        if not_ready:
+            _reopen_str(page, stream, f"{MISSING_CREDENTIALS} on {ops}", reload=True)
         results = _evaluate(page, batch, stream)
+        not_ready = any(_missing_credentials(result) for result in results)
         if not any(_session_expired(result) for result in results):
             if stream is not None:
-                stream.notice(f"CoStar said SessionExpired on {ops}; retry {attempt} worked", code="session_retry_ok")
+                stream.notice(f"CoStar said {said} on {ops}; retry {attempt} worked", code="session_retry_ok")
             return results
     if stream is not None:
         stream.screenshot(f"SessionExpired on {ops} after {len(RETRY_WAITS_SECONDS)} retries")
@@ -219,19 +249,21 @@ class Bootstrap:
         return [str(i) for i in (self.members.get("propertySetMembers") or {}).get("memberPropertyIds") or []]
 
 
-def open_str(page: Page, stream: Any = None) -> None:
-    """Open the STR app once sign-in has settled.
+def open_str(page: Page, stream: Any = None, *, reload: bool = False) -> None:
+    """Open the STR app once sign-in has settled, and wait for it to draw.
 
     Right after sign-in CoStar is still redirecting; navigating then is aborted
     (net::ERR_ABORTED, TownePlace Phoenix Glendale 2026-10-27). Wait for the page to load,
     retry an aborted load once, and say plainly when CoStar sends us back to its login page.
+    ``reload`` loads STR again even when the page is already on it.
     """
     for attempt in (1, 2):
         try:
             page.wait_for_load_state("load", timeout=30_000)
         except Exception:  # noqa: BLE001 - a slow page still gets the goto below
             pass
-        if page.url.startswith(STR_HOME):
+        if page.url.startswith(STR_HOME) and not reload:
+            _wait_for_app(page, stream)
             return
         try:
             page.goto(STR_HOME, wait_until="domcontentloaded", timeout=90_000)
@@ -250,7 +282,21 @@ def open_str(page: Page, stream: Any = None) -> None:
                 stream.screenshot("CoStar returned to its login page")
             msg = "CoStar returned to its login page after sign-in"
             raise LoginRejected(msg)
+        _wait_for_app(page, stream)
         return
+
+
+def _wait_for_app(page: Page, stream: Any = None) -> None:
+    """Wait until the STR app has drawn some text: before that its session may not be set up."""
+    try:
+        page.wait_for_function(
+            "() => document.body && document.body.innerText.trim().length > 0", timeout=APP_READY_TIMEOUT_MS
+        )
+    except Exception:  # noqa: BLE001 - the queries' own retries decide; say what the page looked like
+        if stream is not None:
+            stream.logger.warning(
+                "STR had drawn nothing after %ss: %s", APP_READY_TIMEOUT_MS // 1000, describe_page(page)
+            )
 
 
 def bootstrap(page: Page, config: dict[str, Any], *, stream: Any = None) -> Bootstrap:

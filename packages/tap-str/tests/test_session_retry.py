@@ -92,6 +92,9 @@ class NavPage:
     def wait_for_load_state(self, *_a, **_kw) -> None:
         return None
 
+    def wait_for_function(self, *_a, **_kw) -> None:
+        self.drawn_waits = getattr(self, "drawn_waits", 0) + 1
+
     def goto(self, _url: str, **_kw) -> None:
         self.gotos += 1
         if self.gotos <= self.aborts:
@@ -125,6 +128,82 @@ def test_already_on_str_opens_nothing(waits) -> None:
     page.url = streams.STR_HOME + "/dashboard"
     streams.open_str(page, FakeStream())
     assert page.gotos == 0 and waits == []
+    assert page.drawn_waits == 1  # still waits for the app to draw
+
+
+def test_reload_opens_str_again_even_when_on_it(waits) -> None:
+    page = NavPage(aborts=0)
+    page.url = streams.STR_HOME + "/dashboard"
+    streams.open_str(page, FakeStream(), reload=True)
+    assert page.gotos == 1 and page.drawn_waits == 1
+
+
+class BlankPage(NavPage):
+    """STR loaded but never draws (2026-11-04, Daytona)."""
+
+    def wait_for_function(self, *_a, **_kw) -> None:
+        raise TimeoutError("Timeout 30000ms exceeded.")
+
+    def title(self) -> str:
+        return ""
+
+    def evaluate(self, _js: str, *_a) -> int:
+        return 0
+
+    @property
+    def context(self):  # noqa: ANN201
+        class Context:
+            def cookies(self) -> list[dict]:
+                return [{"name": "costar_sid", "domain": ".costar.com", "value": "secret"}, {"name": "x", "domain": "okta.com"}]
+
+        return Context()
+
+
+def test_a_blank_str_page_is_logged_not_fatal(waits, caplog) -> None:
+    page = BlankPage()
+    page.url = streams.STR_HOME
+    with caplog.at_level(logging.WARNING):
+        streams.open_str(page, FakeStream())
+    assert "STR had drawn nothing after 30s" in caplog.text
+    assert "text_chars=0 costar_cookies=['costar_sid']" in caplog.text
+    assert "secret" not in caplog.text  # cookie names only, never values
+
+
+NOT_READY = {
+    "status": 401,
+    "json": {
+        "error": "Authentication required",
+        "message": "Non-interactive route demanded authentication which could not be verified",
+        "reason": "MissingCredentials",
+    },
+}
+
+
+def test_missing_credentials_reopens_str_then_retries(waits, monkeypatch, caplog) -> None:
+    reopened: list[bool] = []
+    monkeypatch.setattr(streams, "open_str", lambda page, stream=None, *, reload=False: reopened.append(reload))
+    page, stream = FakePage([[NOT_READY], [OK]]), FakeStream()
+    with caplog.at_level(logging.WARNING):
+        data = streams.graphql(page, BODIES[:1], stream=stream)
+    assert data == [{"x": 1}]
+    assert reopened == [True] and waits == [5]
+    assert stream.notices[-1] == ("CoStar said MissingCredentials on SegDayOfWeekTable; retry 1 worked", "session_retry_ok")
+    assert "CoStar refused SegDayOfWeekTable: " in caplog.text
+
+
+def test_missing_credentials_that_never_clears_fails_after_the_retries(waits, monkeypatch) -> None:
+    monkeypatch.setattr(streams, "open_str", lambda page, stream=None, **_kw: None)
+    page = FakePage([[NOT_READY]])
+    with pytest.raises(streams.GraphQLError, match="401.*MissingCredentials"):
+        streams.graphql(page, BODIES[:1], stream=FakeStream())
+    assert page.calls == 1 + len(streams.RETRY_WAITS_SECONDS)
+
+
+def test_other_401s_are_not_retried(waits) -> None:
+    page = FakePage([[{"status": 401, "json": {"reason": "Forbidden"}}]])
+    with pytest.raises(streams.GraphQLError, match="401"):
+        streams.graphql(page, BODIES[:1], stream=FakeStream())
+    assert page.calls == 1
 
 
 class FakeEgress:
@@ -157,7 +236,7 @@ class TappedStream(FakeStream):
 
 def test_a_dead_session_signs_in_again_once_then_resends_the_batch(waits, monkeypatch) -> None:
     opened: list[object] = []
-    monkeypatch.setattr(streams, "open_str", lambda page, stream=None: opened.append(page))
+    monkeypatch.setattr(streams, "open_str", lambda page, stream=None, **_kw: opened.append(page))
     tap = FakeTap()
     page, stream = FakePage([[EXPIRED], [EXPIRED], [EXPIRED], [OK]]), TappedStream(tap)
     assert streams.graphql(page, BODIES, stream=stream) == [{"x": 1}, {"x": 1}]
@@ -210,7 +289,7 @@ class LeavingPage(FakePage):
 
 def test_an_inactivity_sign_out_reopens_str_and_resends_the_batch(waits, monkeypatch) -> None:
     opened: list[str] = []
-    monkeypatch.setattr(streams, "open_str", lambda page, stream=None: opened.append(page.url))
+    monkeypatch.setattr(streams, "open_str", lambda page, stream=None, **_kw: opened.append(page.url))
     page, stream = LeavingPage(), FakeStream()
     assert streams.graphql(page, BODIES, stream=stream) == [{"x": 1}, {"x": 1}]
     assert opened == [SIGNED_OUT_URL]
@@ -221,7 +300,7 @@ def test_an_inactivity_sign_out_reopens_str_and_resends_the_batch(waits, monkeyp
 def test_a_page_that_reopens_on_the_login_page_signs_in_again(waits, monkeypatch) -> None:
     calls: list[str] = []
 
-    def open_str(page, stream=None) -> None:
+    def open_str(page, stream=None, **_kw) -> None:
         calls.append("open")
         if len(calls) == 1:
             raise LoginRejected("CoStar returned to its login page after sign-in")
