@@ -7,6 +7,7 @@ plain in-page ``fetch`` to the STR GraphQL endpoint, so the page's cookies apply
 from __future__ import annotations
 
 import random
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -75,8 +76,49 @@ INACTIVITY_SIGNOUT = "InactivityTimeout"
 PAGE_GONE = "Execution context was destroyed"
 
 
+# CoStar's GraphQL gateway sometimes answers 200 with an error from the service behind it
+# ("Unexpected error while fetching data from benchmarking/compset/segmentation/monthlydayofweek:
+# 500: Internal Server Error", 2026-11-04: AC Phoenix Downtown, then 503 on Saint Rose, each
+# after ~100 good calls on a healthy session). The same query works minutes later. Such a batch
+# waits, then is sent again on the same page and session; no new sign-in.
+UPSTREAM_RETRY_WAITS_SECONDS = (20, 60, 120)
+UPSTREAM_STATUSES = frozenset({429, 502, 503, 504})
+_UPSTREAM_ERROR = re.compile(r"Unexpected error while fetching data from (?P<path>\S+?): (?P<status>429|5\d\d)\b(?P<reason>[^']*)")
+
+
 class GraphQLError(RuntimeError):
     pass
+
+
+class CoStarUnavailable(GraphQLError):
+    """CoStar's own service failed the query every time we asked: an outage on its side.
+
+    The run reports it as retryable, so the runner queues the run again later.
+    """
+
+    retryable = True
+
+
+def _upstream_failure(result: dict[str, Any]) -> str | None:
+    """What CoStar's service said when it, not our query or session, failed; else None.
+
+    Only errors CoStar names as the service behind the gateway failing (5xx, 429), and HTTP
+    502/503/504/429 from the gateway itself. A 500 from the gateway, or any other GraphQL
+    error, may be our query, so it is not retried.
+    """
+    status = result.get("status")
+    payload = result.get("json")
+    if status in UPSTREAM_STATUSES:
+        return f"HTTP {status}"
+    if status != 200 or not isinstance(payload, dict) or not payload.get("errors"):
+        return None
+    said = []
+    for error in payload["errors"]:
+        match = _UPSTREAM_ERROR.search(str(error.get("message") if isinstance(error, dict) else error))
+        if match is None:
+            return None
+        said.append(f"{match['path']}: {match['status']}{match['reason'].rstrip()}")
+    return "; ".join(said)
 
 
 def _session_expired(result: dict[str, Any]) -> bool:
@@ -183,6 +225,34 @@ def _fetch(page: Page, batch: list[dict[str, Any]], stream: Any = None) -> list[
     return results
 
 
+def _retry_upstream(
+    page: Page, batch: list[dict[str, Any]], results: list[dict[str, Any]], stream: Any = None
+) -> list[dict[str, Any]]:
+    """Send again, after a wait, the queries CoStar's own service failed; keep the rest."""
+    results = list(results)
+    for attempt, wait in enumerate(UPSTREAM_RETRY_WAITS_SECONDS, start=1):
+        failed = [i for i, result in enumerate(results) if _upstream_failure(result) is not None]
+        if not failed:
+            return results
+        ops = ", ".join(batch[i]["operationName"] for i in failed)
+        if stream is not None:
+            if attempt == 1:
+                stream.screenshot(f"CoStar service error on {ops}")
+            stream.logger.warning(
+                "CoStar's service failed %s (%s); waiting %ss, then retrying (%d of %d)",
+                ops, _upstream_failure(results[failed[0]]), wait, attempt, len(UPSTREAM_RETRY_WAITS_SECONDS),
+            )
+        time.sleep(wait / 2)
+        move_mouse(page)
+        time.sleep(wait / 2)
+        again = _fetch(page, [batch[i] for i in failed], stream)
+        for i, result in zip(failed, again, strict=True):
+            results[i] = result
+        if stream is not None and all(_upstream_failure(results[i]) is None for i in failed):
+            stream.notice(f"CoStar's service failed {ops}; retry {attempt} worked", code="costar_retry_ok")
+    return results
+
+
 def move_mouse(page: Page | None) -> None:
     """Drift the mouse to a random spot on the page, as a person does while reading."""
     if page is None:
@@ -223,8 +293,18 @@ def graphql(page: Page, bodies: list[dict[str, Any]], *, stream: Any = None) -> 
         batch = bodies[start : start + BATCH_SIZE]
         if start:
             pause(stream, page)
-        results = _fetch(page, batch, stream)
+        results = _retry_upstream(page, batch, _fetch(page, batch, stream), stream)
         for body, result in zip(batch, results, strict=True):
+            said = _upstream_failure(result)
+            if said is not None:
+                tries = 1 + len(UPSTREAM_RETRY_WAITS_SECONDS)
+                waited = sum(UPSTREAM_RETRY_WAITS_SECONDS)
+                msg = (
+                    f"CoStar's STR service failed {body['operationName']} {tries} times over "
+                    f"{waited // 60} min ({said}). The session was fine: this is an outage on "
+                    "CoStar's side, not a login problem, and the run can simply be tried again."
+                )
+                raise CoStarUnavailable(msg)
             payload = result.get("json") or {}
             if result["status"] != 200 or payload.get("errors") or "data" not in payload:
                 detail = payload.get("errors") or payload or "no JSON body"
