@@ -25,6 +25,17 @@ class StrStream(PlaywrightStream):
     """Shared extraction helpers for Str."""
 
     @override
+    def get_records(self, context: Context | None) -> Iterable[dict]:
+        try:
+            yield from super().get_records(context)
+        except Exception as exc:
+            # An outage on CoStar's side: say so after the stream's own error report, as the
+            # run's last error, with retryable so the runner queues the run again later.
+            if getattr(exc, "retryable", False):
+                self.report("error", message=str(exc)[:500], code="costar_unavailable", retryable=True)
+            raise
+
+    @override
     def extract_records(
         self,
         page: Page,

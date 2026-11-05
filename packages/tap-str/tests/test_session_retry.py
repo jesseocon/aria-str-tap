@@ -333,3 +333,87 @@ def test_pauses_move_the_mouse(waits) -> None:
     assert len(Mouse.moves) == 1 and len(waits) == 2
     x, y = Mouse.moves[0]
     assert 200 <= x <= 800 and 180 <= y <= 480
+
+
+# What CoStar sent on 2026-11-04 (AC Phoenix Downtown, Saint Rose): a 200 whose error says the
+# service behind the GraphQL gateway failed.
+def _outage(status: str = "500: Internal Server Error", path: str = "benchmarking/compset/segmentation/monthlydayofweek") -> dict:
+    return {
+        "status": 200,
+        "json": {
+            "errors": [
+                {
+                    "message": f"Unexpected error while fetching data from {path}: {status}",
+                    "locations": [{"line": 4, "column": 5}],
+                    "path": ["SegDayOfWeekTableData", "compSet"],
+                    "extensions": {"code": "INTERNAL_SERVER_ERROR"},
+                }
+            ]
+        },
+    }
+
+
+OUTAGE = _outage()
+
+
+def test_a_costar_service_error_waits_then_resends_only_the_failed_query(waits, caplog) -> None:
+    page, stream = FakePage([[OUTAGE, OK], [{"status": 200, "json": {"data": {"y": 2}}}]]), FakeStream()
+    with caplog.at_level(logging.WARNING):
+        data = streams.graphql(page, BODIES, stream=stream)
+    assert data == [{"y": 2}, {"x": 1}]  # the retried answer goes back in its own place
+    assert page.calls == 2
+    assert sum(waits) == streams.UPSTREAM_RETRY_WAITS_SECONDS[0]
+    assert stream.screens == ["CoStar service error on SegDayOfWeekTable"]
+    assert stream.notices[-1][1] == "costar_retry_ok"
+    assert "monthlydayofweek: 500: Internal Server Error); waiting 20s, then retrying (1 of 3)" in caplog.text
+
+
+def test_a_503_that_clears_on_the_last_retry_carries_on(waits) -> None:
+    flaky = _outage("503: Service Unavailable", "benchmarking/industry/segmentation/monthlydayofweek")
+    page = FakePage([[flaky, OK], [flaky], [flaky], [OK]])
+    assert streams.graphql(page, BODIES, stream=FakeStream()) == [{"x": 1}, {"x": 1}]
+    assert page.calls == 4 and sum(waits) == sum(streams.UPSTREAM_RETRY_WAITS_SECONDS)
+
+
+def test_a_costar_outage_that_lasts_fails_as_retryable_with_a_plain_message(waits) -> None:
+    page = FakePage([[OUTAGE]])
+    with pytest.raises(streams.CoStarUnavailable) as raised:
+        streams.graphql(page, BODIES[:1], stream=FakeStream())
+    assert raised.value.retryable is True
+    assert isinstance(raised.value, streams.GraphQLError)
+    message = str(raised.value)
+    assert "SegDayOfWeekTable 4 times over 3 min" in message
+    assert "monthlydayofweek: 500: Internal Server Error" in message
+    assert "outage on CoStar's side" in message
+    assert page.calls == 1 + len(streams.UPSTREAM_RETRY_WAITS_SECONDS)
+
+
+@pytest.mark.parametrize("status", [429, 502, 503, 504])
+def test_gateway_overload_statuses_are_retried(waits, status) -> None:
+    page = FakePage([[{"status": status, "json": None}], [OK]])
+    assert streams.graphql(page, BODIES[:1], stream=FakeStream()) == [{"x": 1}]
+    assert page.calls == 2
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"status": 200, "json": {"errors": [{"message": "Cannot query field 'x' on type 'Query'."}]}},
+        {"status": 200, "json": {"errors": [OUTAGE["json"]["errors"][0], {"message": "Variable $id is invalid"}]}},
+        {"status": 500, "json": {"errors": ["boom"]}},
+        {"status": 400, "json": None},
+    ],
+)
+def test_query_errors_are_not_mistaken_for_an_outage(waits, answer) -> None:
+    page = FakePage([[answer]])
+    with pytest.raises(streams.GraphQLError) as raised:
+        streams.graphql(page, BODIES[:1], stream=FakeStream())
+    assert not isinstance(raised.value, streams.CoStarUnavailable)
+    assert waits == [] and page.calls == 1
+
+
+def test_a_session_expired_retry_inside_an_outage_retry_still_signs_nothing_in(waits) -> None:
+    # The resent query meets a 402 first; the SessionExpired waits handle it on the same session.
+    page = FakePage([[OUTAGE], [EXPIRED], [OK]])
+    assert streams.graphql(page, BODIES[:1], stream=FakeStream()) == [{"x": 1}]
+    assert page.calls == 3
