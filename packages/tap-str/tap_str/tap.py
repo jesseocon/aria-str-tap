@@ -226,6 +226,7 @@ class TapStr(PlaywrightTap):
                 headless=bool(self.config.get("headless", True)),
                 stealth=bool(self.config.get("stealth", False)),
             ),
+            self.logger,
         )
         self._browser_runtime.start()
         page = self._browser_runtime.page
@@ -275,6 +276,7 @@ class TapStr(PlaywrightTap):
                 headless=bool(self.config.get("headless", True)),
                 stealth=bool(self.config.get("stealth", False)),
             ),
+            self.logger,
         )
         self._browser_runtime.start()
         self._portal_page = enter(self._browser_runtime.page, creds)
