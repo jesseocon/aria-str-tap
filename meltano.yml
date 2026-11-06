@@ -106,6 +106,9 @@ plugins:
     - name: headless
       kind: boolean
       value: false
+    - name: stealth
+      kind: boolean
+      value: false
     - name: rate_limit_seconds
       kind: integer
       value: 5

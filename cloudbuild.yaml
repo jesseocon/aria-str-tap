@@ -13,7 +13,7 @@ steps:
       - --cache-from
       - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:latest
       - -t
-      - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.40
+      - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.41
       - -t
       - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:latest
       - .

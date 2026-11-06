@@ -155,6 +155,12 @@ class TapStr(PlaywrightTap):
             default=False,
         ),
         th.Property(
+            "stealth",
+            th.BooleanType(nullable=False),
+            default=False,
+            description="Hide the signs of an automated browser (aria-singer-playwright stealth).",
+        ),
+        th.Property(
             "rate_limit_seconds",
             th.NumberType(nullable=False),
             default=5.0,
@@ -215,7 +221,11 @@ class TapStr(PlaywrightTap):
     def _start_from_handoff(self, path: Path) -> bool:
         """Start signed in with the previous run's browser state. False when CoStar wants a login."""
         self._browser_runtime = BrowserRuntime(
-            BrowserConfig(storage_state_path=str(path), headless=bool(self.config.get("headless", True))),
+            BrowserConfig(
+                storage_state_path=str(path),
+                headless=bool(self.config.get("headless", True)),
+                stealth=bool(self.config.get("stealth", False)),
+            ),
         )
         self._browser_runtime.start()
         page = self._browser_runtime.page
@@ -260,7 +270,11 @@ class TapStr(PlaywrightTap):
                 totp_secret=str(self.config["portal_totp_secret"]),
             )
         self._browser_runtime = BrowserRuntime(
-            BrowserConfig(storage_state_path=None, headless=bool(self.config.get("headless", True))),
+            BrowserConfig(
+                storage_state_path=None,
+                headless=bool(self.config.get("headless", True)),
+                stealth=bool(self.config.get("stealth", False)),
+            ),
         )
         self._browser_runtime.start()
         self._portal_page = enter(self._browser_runtime.page, creds)
