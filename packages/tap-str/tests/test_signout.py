@@ -236,7 +236,7 @@ def test_a_run_handed_a_live_session_starts_signed_in_without_a_password(tmp_pat
     started: list[str | None] = []
 
     class Runtime:
-        def __init__(self, config) -> None:  # noqa: ANN001
+        def __init__(self, config, logger=None) -> None:  # noqa: ANN001
             started.append(config.storage_state_path)
             self.page = FakePage(DASH)
 
@@ -261,7 +261,7 @@ def test_a_dead_handed_over_session_falls_back_to_the_password(tmp_path, monkeyp
     from singer_playwright.tap import PlaywrightTap
 
     class Runtime:
-        def __init__(self, config) -> None:  # noqa: ANN001
+        def __init__(self, config, logger=None) -> None:  # noqa: ANN001
             self.page = FakePage(DASH, live=False)
 
         def start(self) -> None:
