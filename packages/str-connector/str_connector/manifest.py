@@ -173,6 +173,12 @@ def manifest() -> dict[str, Any]:
                     "title": "STR comp set id. Empty means the performance set.",
                     "pattern": r"^\d*$",
                 },
+                "stealth": {
+                    "type": "boolean",
+                    "title": "Stealth browser",
+                    "description": "Hide the signs of an automated browser (navigator.webdriver, headless user agent and the like).",
+                    "default": False,
+                },
             },
         },
         "run_params_schema": {"type": "object", "additionalProperties": False},

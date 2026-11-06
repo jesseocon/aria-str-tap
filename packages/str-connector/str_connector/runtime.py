@@ -78,6 +78,7 @@ def tap_env(ctx: RunContext, root: Path, streams: list[str]) -> dict[str, str]:
         "TAP_STR_BEGIN_DATE": str(ctx.config.get("begin_date") or "2025-08-01"),
         "TAP_STR_MONTHLY_BEGIN_DATE": str(ctx.config.get("monthly_begin_date") or "2024-01-01"),
         "TAP_STR_HEADLESS": "false",
+        "TAP_STR_STEALTH": "true" if ctx.config.get("stealth") else "false",
         "TAP_STR__SELECT": json.dumps([f"{stream}.*" for stream in streams]),
         "TARGET_BIGQUERY_DATASET": f"bronze_{ctx.config['org_id']}",
         "TARGET_BIGQUERY_STREAM_MAPS": json.dumps(

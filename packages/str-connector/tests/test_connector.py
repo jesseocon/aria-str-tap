@@ -80,6 +80,14 @@ def test_config_accepts_community_settings() -> None:
     assert set(COMMUNITY_VIEWS) >= set(config["community_views"])
 
 
+def test_stealth_is_off_unless_the_connection_turns_it_on() -> None:
+    base = {"org_id": "42", "property_id": "1514908", "development_property_id": "p1", "streams": ["str_series"]}
+    assert validate_config(_manifest(), base)["stealth"] is False
+    assert validate_config(_manifest(), {**base, "stealth": True})["stealth"] is True
+    assert tap_env(_ctx("direct", DIRECT), Path("/app/str"), STREAMS)["TAP_STR_STEALTH"] == "false"
+    assert tap_env(_ctx("direct", DIRECT, stealth=True), Path("/app/str"), STREAMS)["TAP_STR_STEALTH"] == "true"
+
+
 def test_selected_streams_fall_back_to_all_of_them() -> None:
     # A connection saved with the retired full stream ["daily"] gets every stream.
     assert selected_streams({"streams": ["daily"]}) == STREAMS
