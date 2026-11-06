@@ -18,7 +18,7 @@ steps:
       - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:latest
       - .
 images:
-  - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.40
+  - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:0.1.41
   - us-central1-docker.pkg.dev/hospitalityops/aria/aria-connector-str:latest
 options:
   machineType: E2_HIGHCPU_8
