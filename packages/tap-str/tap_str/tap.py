@@ -225,6 +225,7 @@ class TapStr(PlaywrightTap):
                 storage_state_path=str(path),
                 headless=bool(self.config.get("headless", True)),
                 stealth=bool(self.config.get("stealth", False)),
+                label="tap (handed-over session)",
             ),
             self.logger,
         )
@@ -275,6 +276,7 @@ class TapStr(PlaywrightTap):
                 storage_state_path=None,
                 headless=bool(self.config.get("headless", True)),
                 stealth=bool(self.config.get("stealth", False)),
+                label="tap (portal sign-in)",
             ),
             self.logger,
         )
