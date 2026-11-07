@@ -107,12 +107,15 @@ class StrConnector:
     def release_login(self, handoff: LoginHandoff, logger: logging.Logger) -> str:
         """End of a login chain: sign out of CoStar with the handed-over session, headed."""
         from playwright.sync_api import sync_playwright
+        from singer_playwright.network import NetworkProfile
         from tap_str import portals, signout
 
+        profile = None
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=False)
             try:
                 context = browser.new_context(storage_state=str(handoff.path), viewport={"width": 1600, "height": 1000})
+                profile = NetworkProfile.watch(context, "sign-out", logger)
                 page = context.new_page()
                 page.goto(signout.DASHBOARD, wait_until="load", timeout=60_000)
                 okta = any("wyndham.com" in c.get("domain", "") for c in context.cookies())
@@ -125,6 +128,8 @@ class StrConnector:
                         how += f"; Okta sign-out failed: {exc}"
             finally:
                 browser.close()
+                if profile is not None:
+                    profile.report()
         logger.info("Signed out of CoStar at the end of the login chain (%s)", how)
         return f"Signed out of CoStar at the end of the login chain ({how})"
 
