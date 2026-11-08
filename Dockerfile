@@ -48,7 +48,8 @@ RUN uv sync --frozen --no-dev --no-install-local
 # 2. Chromium and its system libraries, plus Google Chrome for logins set to max stealth
 #    (patchright drives it; it installs system-wide under /opt/google/chrome).
 USER root
-RUN playwright install-deps chromium && patchright install chrome && rm -rf /var/lib/apt/lists/*
+RUN playwright install-deps chromium && patchright install chrome && rm -rf /var/lib/apt/lists/* \
+    && chown -R runner:runner /ms-playwright
 USER runner
 RUN playwright install chromium
 
