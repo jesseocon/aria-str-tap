@@ -106,15 +106,17 @@ class StrConnector:
 
     def release_login(self, handoff: LoginHandoff, logger: logging.Logger) -> str:
         """End of a login chain: sign out of CoStar with the handed-over session, headed."""
-        from playwright.sync_api import sync_playwright
+        from singer_playwright.browser import context_options, launch_chromium, start_playwright
         from singer_playwright.network import NetworkProfile
         from tap_str import portals, signout
 
         profile = None
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=False)
+        # The login's browser (ARIA_BROWSER), like every run of the chain it closes.
+        playwright = start_playwright()
+        try:
+            browser = launch_chromium(playwright, headless=False)
             try:
-                context = browser.new_context(storage_state=str(handoff.path), viewport={"width": 1600, "height": 1000})
+                context = browser.new_context(storage_state=str(handoff.path), **context_options())
                 profile = NetworkProfile.watch(context, "sign-out", logger)
                 page = context.new_page()
                 page.goto(signout.DASHBOARD, wait_until="load", timeout=60_000)
@@ -130,6 +132,8 @@ class StrConnector:
                 browser.close()
                 if profile is not None:
                     profile.report()
+        finally:
+            playwright.stop()
         logger.info("Signed out of CoStar at the end of the login chain (%s)", how)
         return f"Signed out of CoStar at the end of the login chain ({how})"
 

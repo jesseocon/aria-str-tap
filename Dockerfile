@@ -45,9 +45,10 @@ COPY --chown=runner:runner packages/tap-str/pyproject.toml packages/tap-str/READ
 COPY --chown=runner:runner packages/str-connector/pyproject.toml packages/str-connector/
 RUN uv sync --frozen --no-dev --no-install-local
 
-# 2. Chromium and its system libraries.
+# 2. Chromium and its system libraries, plus Google Chrome for logins set to max stealth
+#    (patchright drives it; it installs system-wide under /opt/google/chrome).
 USER root
-RUN playwright install-deps chromium && rm -rf /var/lib/apt/lists/*
+RUN playwright install-deps chromium && patchright install chrome && rm -rf /var/lib/apt/lists/*
 USER runner
 RUN playwright install chromium
 
