@@ -133,7 +133,7 @@ dev = [
 requires-dist = [
     { name = "aria-runner", extras = ["browser"], directory = "../aria-runner" },
     { name = "meltano", specifier = ">=4.0" },
-    { name = "singer-playwright", git = "https://github.com/jesseocon/aria-singer-playwright.git?rev=v0.9.0" },
+    { name = "singer-playwright", git = "https://github.com/jesseocon/aria-singer-playwright.git?rev=v0.9.1" },
     { name = "str-connector", editable = "packages/str-connector" },
     { name = "tap-str", editable = "packages/tap-str" },
 ]
@@ -2297,8 +2297,8 @@ wheels = [
 
 [[package]]
 name = "singer-playwright"
-version = "0.9.0"
-source = { git = "https://github.com/jesseocon/aria-singer-playwright.git?rev=v0.9.0#3d7caecda443cf7d57a689c848777d27b9144109" }
+version = "0.9.1"
+source = { git = "https://github.com/jesseocon/aria-singer-playwright.git?rev=v0.9.1#b1a1c728f8cd179920b8fb5966b3eb3e961f7cb6" }
 dependencies = [
     { name = "patchright" },
     { name = "playwright" },
@@ -2476,7 +2476,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "singer-playwright", git = "https://github.com/jesseocon/aria-singer-playwright.git?rev=v0.9.0" },
+    { name = "singer-playwright", git = "https://github.com/jesseocon/aria-singer-playwright.git?rev=v0.9.1" },
     { name = "singer-sdk", specifier = "~=0.54.5" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'", specifier = ">=4.5.0" },
 ]
