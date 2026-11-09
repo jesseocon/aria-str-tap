@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from singer_sdk import typing as th
 
+from singer_playwright import human
 from singer_playwright.login import LoginRejected
 from tap_str.client import StrStream
 from tap_str.community import parse, plan
@@ -266,21 +267,34 @@ def move_mouse(page: Page | None) -> None:
         return
 
 
-def pause(stream: Any = None, page: Page | None = None) -> None:
-    """Wait between query batches like a person between views (random, so not a fixed beat).
-
-    With ``page``, the mouse moves partway through, which keeps CoStar's inactivity sign-out away.
-    """
+def pacer(stream: Any = None) -> human.Pacer | None:
+    """The spacing for one stream's query batches: around ``query_pause_seconds`` each, unevenly,
+    with a longer break every dozen or so. None when pausing is off."""
     tap = _tap_of(stream)
     config = getattr(tap, "config", None) or {}
     base = float(config.get("query_pause_seconds", QUERY_PAUSE_SECONDS))
-    if base > 0:
-        wait = random.uniform(0.5 * base, 1.5 * base)
+    if base <= 0:
+        return None
+    return human.Pacer(base, break_every=random.randint(10, 16), break_median=base * 5)
+
+
+def pause(stream: Any = None, page: Page | None = None, spacing: human.Pacer | None = None) -> None:
+    """Wait between query batches like a person between views (uneven, so not a fixed beat).
+
+    With ``page``, the mouse moves partway through, which keeps CoStar's inactivity sign-out away.
+    """
+    spacing = spacing or pacer(stream)
+    if spacing is None:
+        move_mouse(page)
+        return
+    if not human.enabled():  # pacing off for humans: keep the plain random gap
+        wait = random.uniform(0.5 * spacing.median, 1.5 * spacing.median)
         time.sleep(wait / 2)
         move_mouse(page)
         time.sleep(wait / 2)
-    else:
-        move_mouse(page)
+        return
+    move_mouse(page)
+    spacing.wait(page)
 
 
 def graphql(page: Page, bodies: list[dict[str, Any]], *, stream: Any = None) -> list[dict[str, Any]]:
@@ -289,10 +303,11 @@ def graphql(page: Page, bodies: list[dict[str, Any]], *, stream: Any = None) -> 
     ``stream`` (the calling stream) gets the retry log lines, notices and screenshots.
     """
     out: list[dict[str, Any]] = []
+    spacing = pacer(stream)
     for start in range(0, len(bodies), BATCH_SIZE):
         batch = bodies[start : start + BATCH_SIZE]
         if start:
-            pause(stream, page)
+            pause(stream, page, spacing)
         results = _retry_upstream(page, batch, _fetch(page, batch, stream), stream)
         for body, result in zip(batch, results, strict=True):
             said = _upstream_failure(result)
