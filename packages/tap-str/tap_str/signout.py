@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from singer_playwright import human
+
 if TYPE_CHECKING:
     from playwright.sync_api import Page
 
@@ -35,10 +37,10 @@ def _signed_out(page: Page, timeout_ms: int) -> None:
 
 def _click_through_menu(page: Page, timeout_ms: int) -> None:
     """What a person does: open the hamburger menu, then click Sign Out."""
-    page.locator(MENU_BUTTON).first.click(timeout=timeout_ms)
+    human.click(page.locator(MENU_BUTTON).first, timeout=timeout_ms)
     link = page.locator(SIGN_OUT_LINK).first
     link.wait_for(state="visible", timeout=timeout_ms)
-    link.click(timeout=timeout_ms)
+    human.click(link, timeout=timeout_ms)
     _signed_out(page, timeout_ms)
 
 

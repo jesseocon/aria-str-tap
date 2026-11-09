@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from singer_playwright import human
 from singer_playwright.codes import wait_for_code
 from singer_playwright.login import LoginRejected
 from singer_playwright.sso_login import SsoCredentials, complete_sso
@@ -79,7 +80,7 @@ def _open_costar(page: Page) -> Page:
     link = page.get_by_text(HILTON_COSTAR_LINK, exact=True).first
     link.wait_for(state="visible", timeout=60_000)
     with page.context.expect_page(timeout=60_000) as opened:
-        link.click()
+        human.click(link)
     tab = opened.value
     tab.bring_to_front()
     return tab
@@ -160,22 +161,22 @@ def okta_email_code_sign_in(page: Page, creds: OktaEmailCodeCredentials, *, time
     page.goto(WYNDHAM_COMMUNITY, wait_until="domcontentloaded", timeout=90_000)
     username = page.locator(OKTA_USERNAME)
     username.wait_for(state="visible", timeout=timeout_ms)
-    username.fill(creds.username)
-    page.locator(OKTA_NEXT).click(timeout=timeout_ms)
+    human.type_text(username, creds.username)
+    human.click(page.locator(OKTA_NEXT), timeout=timeout_ms)
     send = page.locator(OKTA_SEND_EMAIL)
     send.wait_for(state="visible", timeout=timeout_ms)
     # A few seconds' grace: the inbox records arrival time, the click happens after this.
     asked = datetime.now(UTC) - timedelta(seconds=5)
-    send.click(timeout=timeout_ms)
+    human.click(send, timeout=timeout_ms)
     instead = page.locator(OKTA_CODE_INSTEAD)
     instead.wait_for(state="visible", timeout=timeout_ms)
-    instead.click(timeout=timeout_ms)
+    human.click(instead, timeout=timeout_ms)
     box = page.locator(OKTA_CODE)
     box.wait_for(state="visible", timeout=timeout_ms)
     log.info("Wyndham: waiting for the emailed code at %s", creds.code_address)
     code = wait_for_code(creds.code_address, after=asked, timeout_s=CODE_WAIT_S)
-    box.fill(code)
-    page.locator(OKTA_VERIFY).click(timeout=timeout_ms)
+    human.type_text(box, code)
+    human.click(page.locator(OKTA_VERIFY), timeout=timeout_ms)
     page.wait_for_url(lambda url: not url.startswith(WYNDHAM_SIGN_IN) or "/app/UserHome" in url, timeout=timeout_ms)
     log.info("Wyndham: signed in to Okta")
 
