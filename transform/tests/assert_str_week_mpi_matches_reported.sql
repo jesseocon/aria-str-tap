@@ -13,6 +13,7 @@ WITH reported AS (
   FROM {{ ref('stg_mlt_str__series') }}
   WHERE source_view = 'combined_summary_weekly'
     AND block = 'CombinedSummaryTableData.totalCompSet'
+    AND segment = 'total'
     AND key_date IS NOT NULL
   GROUP BY str_week_end, comp_set_id, selected_date
   QUALIFY ROW_NUMBER() OVER (PARTITION BY str_week_end, comp_set_id ORDER BY MAX(data_as_of) DESC, selected_date DESC) = 1
