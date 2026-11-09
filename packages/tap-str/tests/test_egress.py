@@ -53,3 +53,24 @@ def test_checks_are_throttled() -> None:
     page = FakePage(["34.1.1.1"])
     watch.record(page, "at sign-in")
     watch.maybe_record(page)  # within the hour: no second lookup (the fake would run out of answers)
+
+
+def test_leaving_the_logins_proxy_ip_is_a_run_warning(caplog, monkeypatch) -> None:
+    monkeypatch.setenv("ARIA_PROXY_EXPECTED_IP", "203.0.113.7")
+    watch = EgressWatch(logging.getLogger("t"), every_seconds=0)
+    page = FakePage(["203.0.113.7", "34.1.1.1", "34.1.1.1", "203.0.113.7"])
+    with caplog.at_level(logging.INFO):
+        for _ in range(4):
+            watch.maybe_record(page)
+    warnings = [r.getMessage() for r in caplog.records if '"kind":"warning"' in r.getMessage()]
+    assert len(warnings) == 1  # once per address
+    assert "Outbound IP 34.1.1.1 is not the login's proxy IP 203.0.113.7" in warnings[0]
+    assert '"code":"proxy_ip"' in warnings[0]
+
+
+def test_no_warning_without_a_proxy(caplog, monkeypatch) -> None:
+    monkeypatch.delenv("ARIA_PROXY_EXPECTED_IP", raising=False)
+    watch = EgressWatch(logging.getLogger("t"), every_seconds=0)
+    with caplog.at_level(logging.INFO):
+        watch.record(FakePage(["34.1.1.1"]), "at sign-in")
+    assert '"kind":"warning"' not in caplog.text

@@ -6,19 +6,27 @@ address, so if CoStar ties a session to the address it signed in from, a change 
 mid-run would explain it. This records the address at sign-in, about once a minute, and at
 any SessionExpired, so failed and successful runs can be compared. It asks a public
 "what's my IP" service through the browser's own request context; nothing goes to CoStar.
+
+When the login has its own proxy (aria-runner sets ARIA_PROXY_EXPECTED_IP), the address should
+never move: any other is reported as a run warning. Loud, but the run goes on; singer-playwright
+already refuses to start a browser that leaves from the wrong IP.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import TYPE_CHECKING
+
+from singer_playwright import progress
 
 if TYPE_CHECKING:
     from playwright.sync_api import Page
 
 IP_URL = "https://api.ipify.org?format=json"
 EVERY_SECONDS = 60
+EXPECTED_IP_ENV = "ARIA_PROXY_EXPECTED_IP"
 
 
 class EgressWatch:
@@ -28,6 +36,8 @@ class EgressWatch:
         self.last_ip: str | None = None
         self.started: float | None = None
         self._last_check = 0.0
+        self.expected_ip = os.environ.get(EXPECTED_IP_ENV, "").strip() or None
+        self._warned: set[str] = set()
 
     def _lookup(self, page: Page) -> str | None:
         try:
@@ -54,6 +64,17 @@ class EgressWatch:
         else:
             self.logger.info("Outbound IP %s (%.1f min in): %s (unchanged)", moment, minutes, ip)
         self.last_ip = ip
+        if self.expected_ip and ip != self.expected_ip and ip not in self._warned:
+            self._warned.add(ip)  # once per address, not once a minute
+            progress.report(
+                self.logger,
+                "warning",
+                message=(
+                    f"Outbound IP {ip} is not the login's proxy IP {self.expected_ip} "
+                    f"({moment}, {minutes:.1f} min in)"
+                ),
+                code="proxy_ip",
+            )
         return ip
 
     def maybe_record(self, page: Page) -> None:

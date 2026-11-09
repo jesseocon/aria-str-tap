@@ -19,7 +19,7 @@ members = [
 ]
 
 [tool.uv.sources]
-singer-playwright = { git = "https://github.com/jesseocon/aria-singer-playwright.git", rev = "v0.10.1" }
+singer-playwright = { git = "https://github.com/jesseocon/aria-singer-playwright.git", rev = "v0.11.0" }
 tap-str = { workspace = true }
 str-connector = { workspace = true }
 aria-runner = { path = "../aria-runner" }

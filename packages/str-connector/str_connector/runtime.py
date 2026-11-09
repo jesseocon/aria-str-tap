@@ -111,10 +111,10 @@ class StrConnector:
         from tap_str import portals, signout
 
         profile = None
-        # The login's browser (ARIA_BROWSER), like every run of the chain it closes.
+        # The login's browser (ARIA_BROWSER), proxy and time zone, like every run of the chain it closes.
         playwright = start_playwright()
         try:
-            browser = launch_chromium(playwright, headless=False)
+            browser = launch_chromium(playwright, headless=False, logger=logger)
             try:
                 context = browser.new_context(storage_state=str(handoff.path), **context_options())
                 profile = NetworkProfile.watch(context, "sign-out", logger)
