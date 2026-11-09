@@ -32,6 +32,7 @@ ENVIRONMENTS = ("development", "production")
 PORTFOLIO_MARTS = (
     "mlt_mart__benchmark__daily",
     "mlt_mart__benchmark__period",
+    "mlt_mart__benchmark__week",
     "mlt_mart__benchmark__segment",
     "mlt_mart__benchmark__day_of_week",
     "mlt_mart__benchmark__comp_set_coverage",
