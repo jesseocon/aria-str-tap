@@ -24,6 +24,9 @@ WITH seven_day AS (
   FROM {{ ref('stg_mlt_str__series') }}
   WHERE source_view = 'combined_summary_weekly'
     AND block = 'CombinedSummaryTableData.totalCompSet'
+    -- Hotels whose comp set reports segmentation also get transient, group and contract rows in
+    -- this block (same entity, metric and day); the week is the total.
+    AND segment = 'total'
     AND key_date IS NOT NULL
     AND EXTRACT(DAYOFWEEK FROM key_date) = 7
   QUALIFY ROW_NUMBER() OVER (
