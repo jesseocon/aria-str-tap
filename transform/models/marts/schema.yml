@@ -76,6 +76,55 @@ models:
       - name: benchmark_sample_property_count
         description: Hotels in the benchmark that reported data (month window only).
 
+  - name: mlt_mart__benchmark__week
+    description: >
+      The hotel against its STR comp set for every STR week (Sunday to Saturday), from STR's own
+      seven-day summary (Combined Summary, weekly). The weekly mirror of mlt_mart__benchmark__period:
+      STR's official occupancy, ADR and RevPAR ranks within the comp set ("6th of 7") and the
+      year-over-year change for the hotel and the set. Occupancy and changes are fractions; MPI,
+      ARI and RGI are hotel / comp set x 100. Prefer this over summing mlt_mart__benchmark__daily
+      when a week's rank or change is shown: STR weights the week by rooms, and only STR ranks it.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [comp_set_id, str_week_start, benchmark]
+    columns:
+      - name: str_week_start
+        description: Sunday that starts the STR week; joins mlt_mart__benchmark__daily.str_week_start.
+        tests: [not_null]
+      - name: str_week_end
+        description: Saturday that ends the STR week.
+        tests: [not_null]
+      - name: benchmark
+        description: Always comp_set (STR's weekly summary has no market rows).
+        tests:
+          - accepted_values:
+              arguments:
+                values: [comp_set]
+      - name: subject_occupancy
+        description: Hotel occupancy for the week (fraction).
+        tests: [not_null]
+      - name: rgi
+        description: Hotel RevPAR / comp set RevPAR x 100 for the week.
+      - name: rgi_yoy
+        description: Year-over-year change in RGI, from the two RevPAR growth rates.
+      - name: subject_revpar_yoy
+        description: Hotel RevPAR change vs the same STR week last year (fraction), as STR reports it.
+      - name: benchmark_revpar_yoy
+        description: Comp set RevPAR change vs the same week last year (fraction), as STR reports it.
+      - name: revpar_rank
+        description: STR's RevPAR rank of the hotel within the comp set (1 = best), out of rank_property_count.
+      - name: revpar_yoy_rank
+        description: STR's rank of the hotel's RevPAR change within the comp set, out of rank_property_count_yoy.
+      - name: data_ok
+        description: Every STR seven-day sufficiency and isolation check passed (the week is complete).
+      - name: yoy_data_ok
+        description: Every STR seven-day year-over-year check passed.
+      - name: revenue_to_fair_share
+        description: >
+          (comp set RevPAR - hotel RevPAR) x current rooms x 7. Positive: room revenue left on the
+          table versus the comp set. An estimate (current room count).
+
   - name: mlt_mart__benchmark__segment
     description: >
       The hotel's transient, group, contract and total business against the comp set (STR Seg
