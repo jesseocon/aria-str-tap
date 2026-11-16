@@ -8,6 +8,13 @@ meltano:
       dataset: "{{ env_var('DBT_BIGQUERY_DATASET', 'silver_1782243883257222643') }}"
       threads: 4
       keyfile: "{{ env_var('DBT_BIGQUERY_KEYFILE', env_var('TARGET_BIGQUERY_CREDENTIALS_PATH', '')) }}"
+      # BigQuery job limits shared by every connector (aria_runner.bq; the runner sets ARIA_DBT_JOB_*,
+      # these defaults match). job_execution_timeout_seconds is also each result poll's HTTP read
+      # timeout (+30 s), so a hung read is retried after ~10 minutes; unset, it was a day.
+      job_execution_timeout_seconds: "{{ env_var('ARIA_DBT_JOB_EXECUTION_TIMEOUT_SECONDS', '600') | int }}"
+      job_retry_deadline_seconds: "{{ env_var('ARIA_DBT_JOB_RETRY_DEADLINE_SECONDS', '1800') | int }}"
+      job_creation_timeout_seconds: "{{ env_var('ARIA_DBT_JOB_CREATION_TIMEOUT_SECONDS', '60') | int }}"
+      job_retries: "{{ env_var('ARIA_DBT_JOB_RETRIES', '3') | int }}"
     production:
       type: bigquery
       method: "{{ env_var('DBT_BIGQUERY_AUTH_METHOD', 'oauth') }}"
@@ -15,6 +22,10 @@ meltano:
       dataset: "{{ env_var('DBT_BIGQUERY_DATASET', 'silver_1782243883257222643') }}"
       threads: 6
       keyfile: "{{ env_var('DBT_BIGQUERY_KEYFILE', env_var('TARGET_BIGQUERY_CREDENTIALS_PATH', '')) }}"
+      job_execution_timeout_seconds: "{{ env_var('ARIA_DBT_JOB_EXECUTION_TIMEOUT_SECONDS', '600') | int }}"
+      job_retry_deadline_seconds: "{{ env_var('ARIA_DBT_JOB_RETRY_DEADLINE_SECONDS', '1800') | int }}"
+      job_creation_timeout_seconds: "{{ env_var('ARIA_DBT_JOB_CREATION_TIMEOUT_SECONDS', '60') | int }}"
+      job_retries: "{{ env_var('ARIA_DBT_JOB_RETRIES', '3') | int }}"
     local:
       type: bigquery
       method: "{{ env_var('DBT_BIGQUERY_AUTH_METHOD', 'oauth') }}"
@@ -22,3 +33,7 @@ meltano:
       dataset: "{{ env_var('DBT_BIGQUERY_DATASET', 'silver_1782243883257222643') }}"
       threads: 4
       keyfile: "{{ env_var('DBT_BIGQUERY_KEYFILE', env_var('TARGET_BIGQUERY_CREDENTIALS_PATH', '')) }}"
+      job_execution_timeout_seconds: "{{ env_var('ARIA_DBT_JOB_EXECUTION_TIMEOUT_SECONDS', '600') | int }}"
+      job_retry_deadline_seconds: "{{ env_var('ARIA_DBT_JOB_RETRY_DEADLINE_SECONDS', '1800') | int }}"
+      job_creation_timeout_seconds: "{{ env_var('ARIA_DBT_JOB_CREATION_TIMEOUT_SECONDS', '60') | int }}"
+      job_retries: "{{ env_var('ARIA_DBT_JOB_RETRIES', '3') | int }}"
