@@ -76,6 +76,7 @@ dependencies = [
 [package.optional-dependencies]
 browser = [
     { name = "fastapi" },
+    { name = "patchright" },
     { name = "playwright" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -92,7 +93,8 @@ requires-dist = [
     { name = "google-cloud-run", specifier = ">=0.10" },
     { name = "google-cloud-storage", specifier = ">=2.18" },
     { name = "jsonschema", specifier = ">=4.23" },
-    { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.47" },
+    { name = "patchright", marker = "extra == 'browser'", specifier = "==1.64.4" },
+    { name = "playwright", marker = "extra == 'browser'", specifier = "==1.63.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.8" },
     { name = "pydantic-settings", specifier = ">=2.4" },
