@@ -69,7 +69,7 @@ plugins:
   extractors:
   - name: tap-str
     namespace: tap_str
-    pip_url: -e ./packages/tap-str
+    pip_url: -e ./packages/tap-str -c ${MELTANO_PROJECT_ROOT}/constraints/tap-str.txt
     capabilities:
     - state
     - catalog
@@ -156,12 +156,12 @@ plugins:
   loaders:
   - name: target-jsonl
     variant: andyh1203
-    pip_url: target-jsonl
+    pip_url: target-jsonl -c ${MELTANO_PROJECT_ROOT}/constraints/target-jsonl.txt
     config:
       destination_path: output
   - name: target-bigquery
     variant: z3z1ma
-    pip_url: git+https://github.com/z3z1ma/target-bigquery.git
+    pip_url: git+https://github.com/z3z1ma/target-bigquery.git@090dad0620711efae4b31031b10b0ea88744aef5 -c ${MELTANO_PROJECT_ROOT}/constraints/target-bigquery.txt
     config:
       project: hospitalityops-dev
       dataset: bronze_1782243883257222643
@@ -177,7 +177,7 @@ plugins:
   utilities:
   - name: dbt-bigquery
     variant: dbt-labs
-    pip_url: dbt-core dbt-bigquery meltano-dbt-ext~=0.5.0
+    pip_url: dbt-core dbt-bigquery meltano-dbt-ext~=0.5.0 -c ${MELTANO_PROJECT_ROOT}/constraints/dbt-bigquery.txt
     commands:
       run-operation:
         args: run-operation

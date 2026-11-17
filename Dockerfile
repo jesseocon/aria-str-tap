@@ -54,8 +54,10 @@ USER runner
 RUN playwright install chromium
 
 # 3. Meltano plugin venvs. tap-str is an editable install, so a placeholder package is
-#    enough here; the real source lands in step 5.
+#    enough here; the real source lands in step 5. Each pip_url installs against its
+#    constraints/ file (exact versions), so a rebuild can't pick up a newer library.
 COPY --chown=runner:runner meltano.yml ./
+COPY --chown=runner:runner constraints ./constraints
 RUN mkdir -p packages/tap-str/tap_str && touch packages/tap-str/tap_str/__init__.py \
     && meltano install \
     && .meltano/extractors/tap-str/venv/bin/playwright install chromium

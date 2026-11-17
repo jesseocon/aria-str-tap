@@ -1,0 +1,12 @@
+# meltano plugin target-jsonl (pip_url -c), from aria-connector-str's live image
+# Exact versions, so a rebuild installs what the last image ran. Regenerate on purpose to upgrade.
+adjust-precision-for-schema==0.3.3
+backoff==1.8.0
+ciso8601==2.4.1
+jsonschema==2.6.0
+python-dateutil==4.0.0
+pytz==2018.4
+simplejson==3.11.1
+singer-python==5.8.0
+target-jsonl==0.1.4
+tzdata==2026.6
