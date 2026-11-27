@@ -101,6 +101,30 @@ class StrConnector:
     def manifest(self) -> dict[str, Any]:
         return manifest()
 
+    def catalog(self) -> dict[str, Any]:
+        """The benchmark marts people query (the org portfolio views gold_{org}.{mart}), with
+        their columns, keys and descriptions (catalog_tables.json, from
+        scripts/capture_catalog.py). STR signs in to a vendor's website, so its manifest is never
+        public: this catalog is shown only behind sign-in in Aria."""
+        tables = json.loads(Path(__file__).with_name("catalog_tables.json").read_text())["tables"]
+        return {
+            "connector": KEY,
+            "version": manifest()["version"],
+            "tables": [
+                {
+                    "stream": "str_series",
+                    "table": mart,
+                    "kind": "mart",
+                    "load": "replace",
+                    "description": t["description"],
+                    "primary_key": t["primary_key"],
+                    "columns": t["columns"],
+                }
+                for mart, t in sorted(tables.items())
+            ],
+            "relationships": [],
+        }
+
     def probe(self, ctx: RunContext) -> None:
         return None
 
