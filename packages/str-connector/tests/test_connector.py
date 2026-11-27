@@ -221,3 +221,19 @@ def test_wyndham_community_needs_its_okta_username_and_code_inbox_and_chains(tmp
     assert env["TAP_STR_HANDOFF_PATH"] == str(tmp_path / "storage_state.json")
     with pytest.raises(ReauthRequired, match="Okta username and code inbox"):
         tap_env(_ctx("wyndham_community", {"TAP_STR_OKTA_USERNAME": "jesse.ocon@wyndham.com"}), Path("/app/str"), STREAMS)
+
+
+def test_catalog_lists_the_benchmark_marts_and_is_never_public():
+    from aria_runner.catalog import ConnectorCatalog
+
+    from str_connector.manifest import PORTFOLIO_MARTS
+    from str_connector.runtime import StrConnector
+
+    connector = StrConnector()
+    catalog = ConnectorCatalog.model_validate(connector.catalog())
+    assert catalog.version == connector.manifest()["version"]
+    assert sorted(t.table for t in catalog.tables) == sorted(PORTFOLIO_MARTS)
+    daily = next(t for t in catalog.tables if t.table == "mlt_mart__benchmark__daily")
+    assert daily.primary_key == ["comp_set_id", "stay_date"]
+    assert any(c.name == "rgi" and c.description for c in daily.columns)
+    assert ConnectorManifest.model_validate(manifest()).public is False
